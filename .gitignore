@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------
+# Root .gitignore — applies to frontend/ and backend/
+# (frontend/.gitignore from the Expo template adds native-specific rules)
+# ---------------------------------------------------------------
+
+# Dependencies
+node_modules/
+
+# Expo / Metro
+.expo/
+.metro-health-check*
+expo-env.d.ts
+web-build/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files — real values must never be committed.
+# Templates (.env.example) stay tracked.
+.env
+.env.*
+!.env.example
+
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors (shared frontend/.vscode settings from the template are kept)
+.idea/
+*.swp
