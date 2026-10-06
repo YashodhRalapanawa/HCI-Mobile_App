@@ -12,9 +12,8 @@ async function start(): Promise<void> {
       await connectDatabase(env.MONGODB_URI);
     } catch (error) {
       console.error(
-        `[db] Could not connect to MongoDB: ${error instanceof Error ? error.message : 'unknown error'}`,
+        `[db] Could not connect to MongoDB: ${error instanceof Error ? error.message : 'unknown error'}. Running in degraded mode.`,
       );
-      process.exit(1);
     }
   } else {
     console.warn(

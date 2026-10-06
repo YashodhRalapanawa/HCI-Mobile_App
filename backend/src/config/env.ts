@@ -18,6 +18,7 @@ const envSchema = z.object({
       (value) => value === undefined || /^mongodb(\+srv)?:\/\//.test(value),
       'MONGODB_URI must start with mongodb:// or mongodb+srv://',
     ),
+  JWT_SECRET: z.string().default('lifeline_lk_super_secure_jwt_secret_key_2026_dev'),
 });
 
 export type Env = z.infer<typeof envSchema>;
