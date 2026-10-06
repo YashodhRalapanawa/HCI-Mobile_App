@@ -1,10 +1,14 @@
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
+import cors from 'cors';
 import { isDatabaseConnected } from './config/database.js';
+import { authRouter } from './modules/auth/auth.routes.js';
+import { userRouter } from './modules/users/user.routes.js';
 
 export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  app.use(cors());
   app.use(express.json({ limit: '1mb' }));
 
   // Liveness: the API process is running.
@@ -24,6 +28,10 @@ export function createApp(): Express {
       database: connected ? 'connected' : 'disconnected',
     });
   });
+
+  // Member 1 Feature Routes
+  app.use('/api/auth', authRouter);
+  app.use('/api/users', userRouter);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });

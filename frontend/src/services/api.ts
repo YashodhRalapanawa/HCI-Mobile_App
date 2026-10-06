@@ -5,9 +5,15 @@
  * e.g. http://192.168.1.20:5000/api. EXPO_PUBLIC_* values are embedded in the
  * app bundle and are visible to users — never put secrets here.
  */
-const rawBaseUrl = process.env.EXPO_PUBLIC_API_URL;
+import { Platform } from 'react-native';
 
-export const API_BASE_URL: string | undefined = rawBaseUrl ? rawBaseUrl.replace(/\/+$/, '') : undefined;
+const rawBaseUrl = process.env.EXPO_PUBLIC_API_URL;
+let resolvedUrl = rawBaseUrl ? rawBaseUrl.replace(/\/+$/, '') : 'http://localhost:5000/api';
+if (Platform.OS === 'web' && resolvedUrl.includes('10.0.2.2')) {
+  resolvedUrl = resolvedUrl.replace('10.0.2.2', 'localhost');
+}
+
+export const API_BASE_URL: string = resolvedUrl;
 
 export class ApiError extends Error {
   constructor(
