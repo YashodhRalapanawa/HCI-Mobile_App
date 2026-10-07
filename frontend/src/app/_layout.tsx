@@ -27,6 +27,7 @@ export default function RootLayout() {
           <Stack.Screen name="profile/security-pin" />
           <Stack.Screen name="profile/public-preview" />
           <Stack.Screen name="profile/settings" />
+          <Stack.Screen name="requests/new" />
         </Stack>
         <StatusBar style="dark" />
       </AuthProvider>

@@ -15,7 +15,7 @@ export interface ScreenItem {
   id: number;
   title: string;
   route: string;
-  category: 'auth' | 'profile';
+  category: 'auth' | 'profile' | 'requests';
   figmaName: string;
 }
 
@@ -37,6 +37,7 @@ export const MEMBER_1_SCREENS: ScreenItem[] = [
   { id: 15, title: 'Security PIN & Passcode', route: '/profile/security-pin', category: 'auth', figmaName: 'Member 1 — Quick Passcode' },
   { id: 16, title: 'Public Donor Profile View', route: '/profile/public-preview', category: 'profile', figmaName: 'Member 1 — Public Donor View' },
   { id: 17, title: 'Account Settings & Privacy', route: '/profile/settings', category: 'profile', figmaName: 'Member 1 — Settings & Privacy' },
+  { id: 18, title: 'New Blood Request', route: '/requests/new', category: 'requests', figmaName: 'Member 2.1 — New Blood Request' },
 ];
 
 interface ScreenSwitcherProps {
@@ -60,7 +61,9 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
         activeOpacity={0.8}
       >
         <Ionicons name="layers-outline" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
-        <Text style={styles.pillText}>Screen {currentScreenId}/17</Text>
+        <Text style={styles.pillText}>
+          {currentScreenId === 18 ? 'Member 2.1' : `Screen ${currentScreenId}/17`}
+        </Text>
         <Ionicons name="chevron-down" size={13} color="#FFFFFF" style={{ marginLeft: 3 }} />
       </TouchableOpacity>
 
