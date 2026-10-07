@@ -17,6 +17,7 @@ import { AppTextInput } from '@/components/AppTextInput';
 import { AppButton } from '@/components/AppButton';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { authApi } from '@/features/auth/services/authApi';
+import { validateEmail, validatePassword } from '@/utils/validation';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -31,8 +32,9 @@ export default function ForgotPasswordScreen() {
 
   // 1. Step 1: Request Reset Code from Backend
   const handleSendCode = async () => {
-    if (!email.trim()) {
-      Alert.alert('Required', 'Please enter your registered email address.');
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.isValid) {
+      Alert.alert('Invalid Email', emailCheck.error || 'Please enter a valid email.');
       return;
     }
 
@@ -64,8 +66,9 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      Alert.alert('Weak Password', 'New password must be at least 6 characters long.');
+    const passCheck = validatePassword(newPassword);
+    if (!passCheck.isValid) {
+      Alert.alert('Invalid Password', passCheck.error || 'Password must be at least 6 characters.');
       return;
     }
 

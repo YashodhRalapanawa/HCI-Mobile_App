@@ -13,21 +13,11 @@ import { colors, spacing, borderRadius } from '@/theme';
 import { AppHeader } from '@/components/AppHeader';
 import { AppTextInput } from '@/components/AppTextInput';
 import { AppButton } from '@/components/AppButton';
+import { Alert } from 'react-native';
 import { BloodGroupSelector } from '@/components/BloodGroupSelector';
+import { DistrictPickerModal } from '@/components/DistrictPickerModal';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
-
-const DISTRICTS = [
-  'Colombo',
-  'Gampaha',
-  'Kalutara',
-  'Kandy',
-  'Galle',
-  'Matara',
-  'Kurunegala',
-  'Anuradhapura',
-  'Jaffna',
-  'Badulla',
-];
+import { validateDistrict, validateCity, type SriLankaDistrict } from '@/utils/validation';
 
 export default function DonorDetailsScreen() {
   const router = useRouter();
@@ -37,10 +27,31 @@ export default function DonorDetailsScreen() {
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
   const [dateOfBirth, setDateOfBirth] = useState('1998-05-15');
   const [weight, setWeight] = useState('65');
-  const [district, setDistrict] = useState('Colombo');
+  const [district, setDistrict] = useState<SriLankaDistrict>('Colombo');
   const [city, setCity] = useState('Colombo 07');
 
   const handleNext = () => {
+    // 1. District validation
+    const districtCheck = validateDistrict(district);
+    if (!districtCheck.isValid) {
+      Alert.alert('Validation Error', districtCheck.error);
+      return;
+    }
+
+    // 2. City validation
+    const cityCheck = validateCity(city);
+    if (!cityCheck.isValid) {
+      Alert.alert('Validation Error', cityCheck.error);
+      return;
+    }
+
+    // 3. Weight validation
+    const parsedWeight = Number(weight);
+    if (isNaN(parsedWeight) || parsedWeight < 40 || parsedWeight > 220) {
+      Alert.alert('Validation Error', 'Barapramaanaya (Weight) 40 kg saha 220 kg athara agayak viya yuthuyi.');
+      return;
+    }
+
     router.push({
       pathname: '/(auth)/complete-profile',
       params: {
@@ -48,9 +59,9 @@ export default function DonorDetailsScreen() {
         bloodGroup,
         gender,
         dateOfBirth,
-        weight,
+        weight: String(parsedWeight),
         district,
-        city,
+        city: city.trim(),
       },
     });
   };
@@ -129,25 +140,14 @@ export default function DonorDetailsScreen() {
         </View>
 
         {/* District Selector */}
-        <View style={styles.fieldSection}>
-          <Text style={styles.sectionLabel}>District *</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.districtScroll}>
-            {DISTRICTS.map((d) => (
-              <TouchableOpacity
-                key={d}
-                style={[styles.districtChip, district === d && styles.districtChipActive]}
-                onPress={() => setDistrict(d)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[styles.districtText, district === d && styles.districtTextActive]}
-                >
-                  {d}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+        <DistrictPickerModal
+          selectedDistrict={district}
+          onSelectDistrict={setDistrict}
+          onLocationDetected={(data) => {
+            if (data.district) setDistrict(data.district as any);
+            if (data.city) setCity(data.city);
+          }}
+        />
 
         <AppTextInput
           label="City / Area"

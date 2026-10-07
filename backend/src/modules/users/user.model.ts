@@ -68,6 +68,7 @@ export interface UserDocument extends Document {
   preferences: UserPreferences;
   otpCode?: string;
   otpExpiresAt?: Date;
+  avatarUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -169,6 +170,7 @@ const userSchema = new Schema<UserDocument>(
     },
     otpCode: { type: String },
     otpExpiresAt: { type: Date },
+    avatarUrl: { type: String, default: '' },
   },
   { timestamps: true },
 );

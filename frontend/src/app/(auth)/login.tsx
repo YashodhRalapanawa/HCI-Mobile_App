@@ -30,14 +30,35 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert('Missing Fields', 'Please enter your email and password.');
+    const trimmedInput = email.trim();
+    if (!trimmedInput) {
+      Alert.alert('Validation Error', 'Karunakara email address eka ho mobile number eka athul karanna.');
+      return;
+    }
+
+    // Check if email or phone
+    if (trimmedInput.includes('@')) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedInput)) {
+        Alert.alert('Validation Error', "Email eke '@' saha valid domain ekak thiyenna oné (eg: user@gmail.com).");
+        return;
+      }
+    } else {
+      const digitsOnly = trimmedInput.replace(/\D/g, '');
+      if (digitsOnly.length !== 10 && digitsOnly.length !== 11) {
+        Alert.alert('Validation Error', 'Phone number ekata hariyatama digits 10k thiyenna oné (eg: 0771234567).');
+        return;
+      }
+    }
+
+    if (!password || password.length < 6) {
+      Alert.alert('Validation Error', 'Password ekata aduma tharamin characters 6k thiyenna oné.');
       return;
     }
 
     try {
       setLoading(true);
-      await login(email.trim(), password, role);
+      await login(trimmedInput, password, role);
       router.replace('/dashboard' as any);
     } catch (err: any) {
       Alert.alert('Login Failed', err.message || 'Please check your email and password.');

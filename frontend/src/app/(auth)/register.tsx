@@ -18,6 +18,13 @@ import { AppButton } from '@/components/AppButton';
 import { RoleTabs } from '@/components/RoleTabs';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 
+import {
+  validateName,
+  validateEmail,
+  validatePhone,
+  validatePassword,
+} from '@/utils/validation';
+
 export default function RegisterScreen() {
   const router = useRouter();
 
@@ -30,23 +37,41 @@ export default function RegisterScreen() {
   const [agreeTerms, setAgreeTerms] = useState(true);
 
   const handleNext = () => {
-    if (!name.trim() || !email.trim() || !password) {
-      Alert.alert('Missing Fields', 'Full name, email address, and password are required.');
+    // 1. Name validation
+    const nameCheck = validateName(name);
+    if (!nameCheck.isValid) {
+      Alert.alert('Validation Error', nameCheck.error);
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Weak Password', 'Password must be at least 6 characters.');
+    // 2. Email validation (@ and domain)
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.isValid) {
+      Alert.alert('Validation Error', emailCheck.error);
+      return;
+    }
+
+    // 3. Phone validation (10 digits)
+    const phoneCheck = validatePhone(phone);
+    if (!phoneCheck.isValid) {
+      Alert.alert('Validation Error', phoneCheck.error);
+      return;
+    }
+
+    // 4. Password validation (min 6 chars)
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.isValid) {
+      Alert.alert('Validation Error', passwordCheck.error);
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Mismatch', 'Passwords do not match. Please recheck.');
+      Alert.alert('Validation Error', 'Passwords dekama ekama vage venna oné. Karunakara re-check karanna.');
       return;
     }
 
     if (!agreeTerms) {
-      Alert.alert('Terms Required', 'Please accept the privacy terms to continue.');
+      Alert.alert('Terms Required', 'Karunakara Privacy Policy & Terms accept karanna.');
       return;
     }
 
@@ -57,7 +82,7 @@ export default function RegisterScreen() {
         role,
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        phone: phone.trim() || '+94 77 123 4567',
+        phone: phone.trim(),
         password,
       },
     });
