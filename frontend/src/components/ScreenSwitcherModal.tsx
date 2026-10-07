@@ -35,8 +35,9 @@ export const MEMBER_1_SCREENS: ScreenItem[] = [
   { id: 13, title: 'Donation History & Stats', route: '/profile/donation-history', category: 'profile', figmaName: 'Member 1 — Donation History' },
   { id: 14, title: 'Donor Badges & Milestones', route: '/profile/badges', category: 'profile', figmaName: 'Member 1 — Donor Badges' },
   { id: 15, title: 'Security PIN & Passcode', route: '/profile/security-pin', category: 'auth', figmaName: 'Member 1 — Quick Passcode' },
-  { id: 16, title: 'Public Donor Profile View', route: '/profile/public-preview', category: 'profile', figmaName: 'Member 1 — Public Donor View' },
+  { id: 16, title: 'Home Dashboard (Member 1.16)', route: '/dashboard', category: 'profile', figmaName: 'Member 1.16 — Dashboard' },
   { id: 17, title: 'Account Settings & Privacy', route: '/profile/settings', category: 'profile', figmaName: 'Member 1 — Settings & Privacy' },
+  { id: 18, title: 'Public Donor Profile View', route: '/profile/public-preview', category: 'profile', figmaName: 'Member 1 — Public Donor View' },
 ];
 
 interface ScreenSwitcherProps {
@@ -60,7 +61,7 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
         activeOpacity={0.8}
       >
         <Ionicons name="layers-outline" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
-        <Text style={styles.pillText}>Screen {currentScreenId}/17</Text>
+        <Text style={styles.pillText}>Screen {currentScreenId}/{MEMBER_1_SCREENS.length}</Text>
         <Ionicons name="chevron-down" size={13} color="#FFFFFF" style={{ marginLeft: 3 }} />
       </TouchableOpacity>
 
