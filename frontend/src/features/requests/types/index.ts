@@ -12,6 +12,7 @@ export interface SelectedDocument {
   name: string;
   mimeType?: string;
   size?: number;
+  file?: any;
 }
 
 export interface CreatedRequestResponse {

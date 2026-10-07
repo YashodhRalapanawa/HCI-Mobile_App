@@ -50,7 +50,13 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }
 
   if (!response.ok) {
-    throw new ApiError(`Request failed with status ${response.status}`, response.status, body);
+    const serverMessage =
+      typeof body === 'object' && body !== null && 'message' in body && typeof (body as any).message === 'string'
+        ? (body as any).message
+        : typeof body === 'object' && body !== null && 'error' in body && typeof (body as any).error === 'string'
+        ? (body as any).error
+        : `Request failed with status ${response.status}`;
+    throw new ApiError(serverMessage, response.status, body);
   }
   return body as T;
 }

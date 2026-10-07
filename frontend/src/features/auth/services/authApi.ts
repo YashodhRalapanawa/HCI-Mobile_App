@@ -7,6 +7,7 @@ export interface UserDto {
   phone?: string;
   bloodGroup: string;
   role: 'donor' | 'recipient' | 'admin';
+  avatarUrl?: string;
   gender?: string;
   dateOfBirth?: string;
   weight?: number;

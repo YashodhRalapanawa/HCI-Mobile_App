@@ -2,69 +2,79 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, borderRadius } from '@/theme';
+import { colors } from '@/theme';
 
 interface BottomNavBarProps {
   activeTab?: 'home' | 'search' | 'alerts' | 'profile';
 }
 
-export function BottomNavBar({ activeTab = 'profile' }: BottomNavBarProps) {
+export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
   const router = useRouter();
 
   return (
     <View style={styles.container}>
+      {/* Home Tab */}
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => router.replace('/profile')}
+        onPress={() => router.replace('/dashboard' as any)}
         activeOpacity={0.7}
       >
-        <Ionicons
-          name={activeTab === 'home' ? 'home' : 'home-outline'}
-          size={22}
-          color={activeTab === 'home' ? colors.primary : colors.textMuted}
-        />
+        <View style={activeTab === 'home' ? styles.activeHomeIconContainer : styles.iconContainer}>
+          <Ionicons
+            name={activeTab === 'home' ? 'home' : 'home-outline'}
+            size={activeTab === 'home' ? 19 : 22}
+            color={activeTab === 'home' ? '#FFFFFF' : '#94A3B8'}
+          />
+        </View>
         <Text style={[styles.tabText, activeTab === 'home' && styles.tabTextActive]}>Home</Text>
       </TouchableOpacity>
 
+      {/* Search Tab */}
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => router.push('/profile/public-preview')}
+        onPress={() => router.push('/profile/public-preview' as any)}
         activeOpacity={0.7}
       >
-        <Ionicons
-          name={activeTab === 'search' ? 'search' : 'search-outline'}
-          size={22}
-          color={activeTab === 'search' ? colors.primary : colors.textMuted}
-        />
-        <Text style={[styles.tabText, activeTab === 'search' && styles.tabTextActive]}>Donors</Text>
+        <View style={styles.iconContainer}>
+          <Ionicons
+            name={activeTab === 'search' ? 'search' : 'search-outline'}
+            size={22}
+            color={activeTab === 'search' ? colors.primary : '#94A3B8'}
+          />
+        </View>
+        <Text style={[styles.tabText, activeTab === 'search' && styles.tabTextActive]}>Search</Text>
       </TouchableOpacity>
 
+      {/* Alerts Tab */}
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => router.push('/profile/settings')}
+        onPress={() => router.push('/profile/emergency-contacts' as any)}
         activeOpacity={0.7}
       >
-        <Ionicons
-          name={activeTab === 'alerts' ? 'notifications' : 'notifications-outline'}
-          size={22}
-          color={activeTab === 'alerts' ? colors.primary : colors.textMuted}
-        />
+        <View style={styles.iconContainer}>
+          <Ionicons
+            name={activeTab === 'alerts' ? 'notifications' : 'notifications-outline'}
+            size={22}
+            color={activeTab === 'alerts' ? colors.primary : '#94A3B8'}
+          />
+        </View>
         <Text style={[styles.tabText, activeTab === 'alerts' && styles.tabTextActive]}>Alerts</Text>
       </TouchableOpacity>
 
+      {/* Profile Tab */}
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => router.replace('/profile')}
+        onPress={() => router.replace('/profile' as any)}
         activeOpacity={0.7}
       >
-        <View style={activeTab === 'profile' ? styles.activePill : undefined}>
+        <View style={styles.iconContainer}>
           <Ionicons
-            name="person"
-            size={20}
-            color={activeTab === 'profile' ? '#FFFFFF' : colors.textMuted}
+            name={activeTab === 'profile' ? 'person' : 'person-outline'}
+            size={22}
+            color={activeTab === 'profile' ? colors.primary : '#94A3B8'}
           />
         </View>
-        {activeTab !== 'profile' ? <Text style={styles.tabText}>Profile</Text> : null}
+        <Text style={[styles.tabText, activeTab === 'profile' && styles.tabTextActive]}>Profile</Text>
       </TouchableOpacity>
     </View>
   );
@@ -76,7 +86,7 @@ const styles = StyleSheet.create({
     height: 64,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'space-around',
     paddingHorizontal: 16,
@@ -85,28 +95,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
+    height: '100%',
+  },
+  iconContainer: {
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeHomeIconContainer: {
+    width: 32,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabText: {
     fontSize: 10,
-    fontWeight: '600',
-    color: colors.textMuted,
+    fontWeight: '500',
+    color: '#94A3B8',
     marginTop: 2,
   },
   tabTextActive: {
-    color: colors.primary,
+    color: '#DC2626',
     fontWeight: '700',
-  },
-  activePill: {
-    width: 44,
-    height: 38,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
   },
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import { AppButton } from '@/components/AppButton';
 import { BottomNavBar } from '@/components/BottomNavBar';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { makePhoneCall } from '@/utils/phone';
 
 export default function PublicProfilePreviewScreen() {
   const router = useRouter();
@@ -29,10 +31,27 @@ export default function PublicProfilePreviewScreen() {
   };
 
   const handleCall = () => {
+    const donorPhone = user?.phone || '+94 77 123 4567';
+    const donorName = user?.name || 'Verified Donor';
+
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' ? window.confirm(`Call donor ${donorName} at ${donorPhone}?`) : true;
+      if (confirmed) {
+        makePhoneCall(donorPhone, donorName);
+      }
+      return;
+    }
+
     Alert.alert(
       'Donor Contact',
-      `Connecting call to verified donor line: ${user?.phone || '+94 77 123 4567'}`,
-      [{ text: 'Call Now' }, { text: 'Cancel', style: 'cancel' }],
+      `Directly call verified donor ${donorName} (${donorPhone})?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Call Now',
+          onPress: () => makePhoneCall(donorPhone, donorName),
+        },
+      ],
     );
   };
 
@@ -41,7 +60,7 @@ export default function PublicProfilePreviewScreen() {
       <AppHeader
         title="Donor Profile (Public View)"
         onBack={() => router.back()}
-        rightElement={<ScreenSwitcher currentScreenId={16} />}
+        rightElement={<ScreenSwitcher currentScreenId={18} />}
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>

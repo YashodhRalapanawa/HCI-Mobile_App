@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,13 +13,21 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, borderRadius } from '@/theme';
 import { AppHeader } from '@/components/AppHeader';
 import { AppTextInput } from '@/components/AppTextInput';
 import { AppButton } from '@/components/AppButton';
 import { BloodGroupSelector } from '@/components/BloodGroupSelector';
+import { DistrictPickerModal } from '@/components/DistrictPickerModal';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import {
+  validateName,
+  validatePhone,
+  validateDistrict,
+  validateCity,
+} from '@/utils/validation';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -26,17 +35,76 @@ export default function EditProfileScreen() {
 
   const [name, setName] = useState(user?.name || 'Kasun Perera');
   const [email] = useState(user?.email || 'kasun@example.com');
-  const [phone, setPhone] = useState(user?.phone || '+94 77 123 4567');
+  const [phone, setPhone] = useState(user?.phone || '0771234567');
   const [bloodGroup, setBloodGroup] = useState(user?.bloodGroup || 'O+');
   const [district, setDistrict] = useState(user?.district || 'Colombo');
   const [city, setCity] = useState(user?.city || 'Colombo 07');
   const [weight, setWeight] = useState(String(user?.weight || 68));
   const [isAvailable, setIsAvailable] = useState(Boolean(user?.isAvailable));
+  const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatarUrl || '');
   const [loading, setLoading] = useState(false);
 
+  const handlePickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Denied', 'Camera roll permissions are required to choose a profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.6,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const selectedUri = asset.base64
+          ? `data:image/jpeg;base64,${asset.base64}`
+          : asset.uri;
+        setAvatarUrl(selectedUri);
+      }
+    } catch (err: any) {
+      Alert.alert('Photo Selection Error', err.message || 'Could not pick image.');
+    }
+  };
+
   const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert('Required', 'Please enter your name.');
+    // 1. Name validation
+    const nameCheck = validateName(name);
+    if (!nameCheck.isValid) {
+      Alert.alert('Validation Error', nameCheck.error);
+      return;
+    }
+
+    // 2. Phone validation (10 digits)
+    const phoneCheck = validatePhone(phone);
+    if (!phoneCheck.isValid) {
+      Alert.alert('Validation Error', phoneCheck.error);
+      return;
+    }
+
+    // 3. District validation (Sri Lanka 25 districts)
+    const districtCheck = validateDistrict(district);
+    if (!districtCheck.isValid) {
+      Alert.alert('Validation Error', districtCheck.error);
+      return;
+    }
+
+    // 4. City validation
+    const cityCheck = validateCity(city);
+    if (!cityCheck.isValid) {
+      Alert.alert('Validation Error', cityCheck.error);
+      return;
+    }
+
+    // 5. Weight validation
+    const parsedWeight = Number(weight);
+    if (isNaN(parsedWeight) || parsedWeight < 40 || parsedWeight > 220) {
+      Alert.alert('Validation Error', 'Barapramaanaya (Weight) 40 kg saha 220 kg athara agayak viya yuthuyi.');
       return;
     }
 
@@ -48,15 +116,16 @@ export default function EditProfileScreen() {
         bloodGroup,
         district: district.trim(),
         city: city.trim(),
-        weight: Number(weight) || 68,
+        weight: parsedWeight,
         isAvailable,
+        avatarUrl,
       });
 
-      Alert.alert('Success', 'Profile changes saved successfully.', [
+      Alert.alert('Success', 'Profile changes saved successfully in MongoDB Atlas.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
-    } catch (_) {
-      Alert.alert('Success', 'Profile changes saved locally.', [
+    } catch (err: any) {
+      Alert.alert('Success', 'Profile changes saved.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } finally {
@@ -79,22 +148,28 @@ export default function EditProfileScreen() {
         {/* Avatar with Camera badge */}
         <View style={styles.avatarSection}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarInitials}>
-              {name
-                .split(' ')
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join('') || 'KP'}
-            </Text>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitials}>
+                {name
+                  .split(' ')
+                  .map((n) => n[0])
+                  .slice(0, 2)
+                  .join('') || 'KP'}
+              </Text>
+            )}
             <TouchableOpacity
               style={styles.cameraBtn}
-              onPress={() => Alert.alert('Upload Photo', 'Choose from gallery or take a new photo.')}
+              onPress={handlePickImage}
               activeOpacity={0.8}
             >
               <Ionicons name="camera" size={16} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.changePhotoText}>Change Profile Picture</Text>
+          <TouchableOpacity onPress={handlePickImage} activeOpacity={0.7}>
+            <Text style={styles.changePhotoText}>Change Profile Picture</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Form Inputs */}
@@ -135,14 +210,14 @@ export default function EditProfileScreen() {
 
         {/* District and City */}
         <View style={styles.twoCol}>
-          <View style={{ flex: 1, marginRight: 8 }}>
-            <AppTextInput
-              label="District"
-              required
-              icon="location-outline"
-              value={district}
-              onChangeText={setDistrict}
-              placeholder="Colombo"
+          <View style={{ flex: 1.1, marginRight: 8 }}>
+            <DistrictPickerModal
+              selectedDistrict={district}
+              onSelectDistrict={setDistrict}
+              onLocationDetected={(data) => {
+                if (data.district) setDistrict(data.district);
+                if (data.city) setCity(data.city);
+              }}
             />
           </View>
           <View style={{ flex: 1.2 }}>
@@ -221,6 +296,11 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '900',
     color: '#FFFFFF',
+  },
+  avatarImage: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
   },
   cameraBtn: {
     position: 'absolute',

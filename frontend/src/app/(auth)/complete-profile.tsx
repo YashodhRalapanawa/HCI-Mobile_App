@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -34,9 +33,13 @@ export default function CompleteProfileScreen() {
   const [contactPhone, setContactPhone] = useState('+94 71 987 6543');
   const [contactRel, setContactRel] = useState('Spouse');
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isConflict, setIsConflict] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    setErrorMessage(null);
+    setIsConflict(false);
     try {
       setLoading(true);
       await register({
@@ -59,23 +62,15 @@ export default function CompleteProfileScreen() {
         },
       });
 
-      Alert.alert(
-        'Profile Created!',
-        'Your blood donor profile is ready. Let us verify your phone number.',
-        [
-          {
-            text: 'Verify Phone',
-            onPress: () => router.push('/(auth)/verify-otp'),
-          },
-        ],
-      );
+      router.replace('/dashboard' as any);
     } catch (err: any) {
-      Alert.alert('Registration Notice', err.message || 'Continuing to verification...', [
-        {
-          text: 'Continue',
-          onPress: () => router.push('/(auth)/verify-otp'),
-        },
-      ]);
+      const msg = err?.message || 'Failed to complete registration.';
+      const conflict =
+        err?.status === 409 ||
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('conflict');
+      setIsConflict(conflict);
+      setErrorMessage(msg);
     } finally {
       setLoading(false);
     }
@@ -193,6 +188,34 @@ export default function CompleteProfileScreen() {
             </View>
           </View>
         </View>
+
+        {/* Error / Conflict Banner */}
+        {errorMessage ? (
+          <View style={styles.errorBanner}>
+            <View style={styles.errorHeader}>
+              <Ionicons name="alert-circle" size={20} color={colors.danger} />
+              <Text style={styles.errorTitle}>
+                {isConflict ? 'Account Already Exists' : 'Registration Failed'}
+              </Text>
+            </View>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+            {isConflict ? (
+              <TouchableOpacity
+                style={styles.conflictLoginBtn}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(auth)/login',
+                    params: { email: params.email ? String(params.email) : '' },
+                  })
+                }
+                activeOpacity={0.8}
+              >
+                <Ionicons name="log-in-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.conflictLoginBtnText}>Sign In to Your Account</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Submit Button */}
         <AppButton
@@ -315,5 +338,47 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: borderRadius.md,
     marginTop: spacing.sm,
+  },
+  errorBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.2,
+    borderColor: '#FCA5A5',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  errorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  errorTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#991B1B',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  conflictLoginBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginTop: 10,
+  },
+  conflictLoginBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

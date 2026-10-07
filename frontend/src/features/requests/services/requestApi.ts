@@ -23,13 +23,31 @@ export const requestApi = {
     formData.append('hospitalReferenceAndWard', values.hospitalReferenceAndWard.trim());
     formData.append('urgency', values.urgency);
 
-    // React Native FormData file attachment format
-    const fileObj: any = {
-      uri: values.document.uri,
-      name: values.document.name,
-      type: values.document.mimeType || 'application/octet-stream',
-    };
-    formData.append('document', fileObj);
+    // Support both Web (Blob/File) and Mobile (React Native URI object)
+    if (typeof window !== 'undefined' && (values.document.file instanceof Blob || (typeof File !== 'undefined' && values.document.file instanceof File))) {
+      formData.append('document', values.document.file, values.document.name);
+    } else if (typeof window !== 'undefined' && values.document.uri && (values.document.uri.startsWith('blob:') || values.document.uri.startsWith('data:'))) {
+      try {
+        const fetched = await fetch(values.document.uri);
+        const blob = await fetched.blob();
+        formData.append('document', blob, values.document.name);
+      } catch {
+        const fileObj: any = {
+          uri: values.document.uri,
+          name: values.document.name,
+          type: values.document.mimeType || 'application/octet-stream',
+        };
+        formData.append('document', fileObj);
+      }
+    } else {
+      // React Native Mobile
+      const fileObj: any = {
+        uri: values.document.uri,
+        name: values.document.name,
+        type: values.document.mimeType || 'application/octet-stream',
+      };
+      formData.append('document', fileObj);
+    }
 
     return apiRequest<{ message: string; request: CreatedRequestResponse }>('requests', {
       method: 'POST',

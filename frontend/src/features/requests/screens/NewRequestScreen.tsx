@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +32,8 @@ import type {
   HospitalOption,
   CreatedRequestResponse,
 } from '../types';
+
+const DRAFT_STORAGE_KEY = 'lifeline_request_draft_v1';
 
 const FALLBACK_HOSPITALS: HospitalOption[] = [
   { id: 'hosp-colombo-city', name: 'City Hospital, Colombo', district: 'Colombo' },
@@ -55,13 +58,61 @@ export function NewRequestScreen() {
   const [hospitalReferenceAndWard, setHospitalReferenceAndWard] = useState('REQ-2026-024 / Ward 05');
   const [document, setDocument] = useState<SelectedDocument | null>(null);
 
-  // Status & Validation State
+  // Status, Modal & Validation State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [submittedRequest, setSubmittedRequest] = useState<CreatedRequestResponse | null>(null);
 
-  const isDemoAuth = !token || token === 'demo-jwt-token';
+  const isRealSession = Boolean(
+    token &&
+    token !== 'demo-jwt-token' &&
+    token !== 'dev-fallback-token' &&
+    token.split('.').length === 3,
+  );
+  const isDemoAuth = !isRealSession;
+
+  // Load saved draft on mount
+  useEffect(() => {
+    async function loadDraft() {
+      try {
+        const saved = await AsyncStorage.getItem(DRAFT_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.patientName) setPatientName(parsed.patientName);
+          if (parsed.bloodGroup) setBloodGroup(parsed.bloodGroup);
+          if (parsed.unitsRequired) setUnitsRequired(Number(parsed.unitsRequired));
+          if (parsed.hospitalId) setHospitalId(parsed.hospitalId);
+          if (parsed.hospitalReferenceAndWard) setHospitalReferenceAndWard(parsed.hospitalReferenceAndWard);
+          if (parsed.urgency) setUrgency(parsed.urgency);
+        }
+      } catch (_) {}
+    }
+    void loadDraft();
+  }, []);
+
+  const saveDraft = async () => {
+    try {
+      await AsyncStorage.setItem(
+        DRAFT_STORAGE_KEY,
+        JSON.stringify({
+          patientName,
+          bloodGroup,
+          unitsRequired,
+          hospitalId,
+          hospitalReferenceAndWard,
+          urgency,
+        }),
+      );
+    } catch (_) {}
+  };
+
+  const clearDraft = async () => {
+    try {
+      await AsyncStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch (_) {}
+  };
 
   // Fetch live hospitals from backend on mount
   useEffect(() => {
@@ -116,22 +167,15 @@ export function NewRequestScreen() {
     setSubmitError(null);
 
     if (!validateForm()) {
+      setSubmitError('Please complete all required fields and upload the hospital request document.');
       return;
     }
 
     // If running in demo mode without real backend JWT session
-    if (isDemoAuth) {
-      Alert.alert(
-        'Authentication Required',
-        'Submitting a blood request to the live database requires signing in with an authenticated account. Would you like to sign in now?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign In',
-            onPress: () => router.push('/(auth)/login'),
-          },
-        ],
-      );
+    if (isDemoAuth || !token) {
+      await saveDraft();
+      setSubmitError('Authentication required: Sign in with an authenticated account to submit to the live database.');
+      setShowAuthModal(true);
       return;
     }
 
@@ -147,17 +191,33 @@ export function NewRequestScreen() {
         document,
       });
 
+      await clearDraft();
       setSubmittedRequest(response.request);
     } catch (err: any) {
-      const msg = err?.message || 'Failed to submit blood request. Please try again.';
-      setSubmitError(msg);
-      Alert.alert('Submission Error', msg);
+      const isAuthError =
+        err?.status === 401 ||
+        err?.message?.includes('401') ||
+        err?.message?.toLowerCase().includes('token') ||
+        err?.message?.toLowerCase().includes('authentication') ||
+        err?.message?.toLowerCase().includes('session') ||
+        err?.message?.toLowerCase().includes('unauthorized');
+
+      if (isAuthError) {
+        await saveDraft();
+        const sessionMsg = 'Your session has expired or is invalid. Please sign in to submit this request.';
+        setSubmitError(sessionMsg);
+        setShowAuthModal(true);
+      } else {
+        const msg = err?.message || 'Failed to submit blood request. Please try again.';
+        setSubmitError(msg);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleResetForm = () => {
+  const handleResetForm = async () => {
+    await clearDraft();
     setSubmittedRequest(null);
     setPatientName('');
     setBloodGroup('O+');
@@ -200,7 +260,7 @@ export function NewRequestScreen() {
 
             {__DEV__ && (
               <View style={styles.devSwitcherWrapper}>
-                <ScreenSwitcher currentScreenId={18} />
+                <ScreenSwitcher currentScreenId={19} />
               </View>
             )}
           </View>
@@ -213,7 +273,13 @@ export function NewRequestScreen() {
                 Preview Mode: Sign in to submit requests to the live database.
               </Text>
               <TouchableOpacity
-                onPress={() => router.push('/(auth)/login')}
+                onPress={async () => {
+                  await saveDraft();
+                  router.push({
+                    pathname: '/(auth)/login',
+                    params: { returnTo: '/requests/new' },
+                  });
+                }}
                 style={styles.demoLoginBtn}
               >
                 <Text style={styles.demoLoginBtnText}>Sign In</Text>
@@ -424,8 +490,30 @@ export function NewRequestScreen() {
               {/* Error banner if submission failed */}
               {submitError ? (
                 <View style={styles.submitErrorBanner}>
-                  <Ionicons name="alert-circle" size={18} color={colors.danger} />
-                  <Text style={styles.submitErrorText}>{submitError}</Text>
+                  <View style={styles.submitErrorHeader}>
+                    <Ionicons name="alert-circle" size={18} color={colors.danger} />
+                    <Text style={styles.submitErrorText}>{submitError}</Text>
+                  </View>
+                  {(isDemoAuth ||
+                    !token ||
+                    submitError.toLowerCase().includes('sign in') ||
+                    submitError.toLowerCase().includes('session') ||
+                    submitError.toLowerCase().includes('auth')) ? (
+                    <TouchableOpacity
+                      style={styles.errorSignInBtn}
+                      onPress={async () => {
+                        await saveDraft();
+                        router.push({
+                          pathname: '/(auth)/login',
+                          params: { returnTo: '/requests/new' },
+                        });
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="log-in-outline" size={16} color="#FFFFFF" />
+                      <Text style={styles.errorSignInBtnText}>Sign In to Submit</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               ) : null}
 
@@ -449,6 +537,52 @@ export function NewRequestScreen() {
 
       {/* Shared Bottom Navigation Bar */}
       <BottomNavBar activeTab="home" />
+
+      {/* Authentication Required Modal (Expo Web & Mobile Compatible) */}
+      <Modal
+        visible={showAuthModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAuthModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconCircle}>
+              <Ionicons name="lock-closed" size={28} color={colors.primary} />
+            </View>
+
+            <Text style={styles.modalTitle}>Sign In Required</Text>
+            <Text style={styles.modalSubtitle}>
+              Submitting a blood request to the live database requires an authenticated session.
+              Your entered form information has been safely preserved as a draft.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalPrimaryBtn}
+              onPress={async () => {
+                await saveDraft();
+                setShowAuthModal(false);
+                router.push({
+                  pathname: '/(auth)/login',
+                  params: { returnTo: '/requests/new' },
+                });
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="log-in-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.modalPrimaryBtnText}>Sign In Now</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setShowAuthModal(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.modalCancelBtnText}>Keep Editing Draft</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -592,21 +726,42 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   submitErrorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderWidth: 1.2,
+    borderColor: '#FCA5A5',
     borderRadius: borderRadius.md,
     padding: 12,
     marginBottom: 14,
     gap: 8,
   },
+  submitErrorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   submitErrorText: {
     flex: 1,
     fontSize: 12,
-    color: colors.danger,
-    fontWeight: '500',
+    color: '#991B1B',
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  errorSignInBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  errorSignInBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   submitButton: {
     backgroundColor: colors.primary,
@@ -731,6 +886,79 @@ const styles = StyleSheet.create({
   profileBtnText: {
     color: colors.text,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  // Modal styles for Authentication prompt
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: spacing.xl,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  modalIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: spacing.lg,
+  },
+  modalPrimaryBtn: {
+    width: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    height: 48,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  modalPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalCancelBtn: {
+    width: '100%',
+    backgroundColor: '#F1F5F9',
+    borderRadius: borderRadius.md,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCancelBtnText: {
+    color: '#475569',
+    fontSize: 13,
     fontWeight: '600',
   },
 });

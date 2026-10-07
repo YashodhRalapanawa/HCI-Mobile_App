@@ -34,6 +34,7 @@ export function DocumentUploadBox({
             name: file.name,
             mimeType: file.mimeType,
             size: file.size,
+            file: (file as any).file,
           });
         }
       }

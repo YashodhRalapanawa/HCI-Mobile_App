@@ -26,6 +26,7 @@ const DEMO_USER: UserDto = {
   phone: '+94 77 123 4567',
   bloodGroup: 'O+',
   role: 'donor',
+  avatarUrl: '',
   gender: 'Male',
   dateOfBirth: '1998-05-15',
   weight: 68,
@@ -127,7 +128,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const savedToken = await AsyncStorage.getItem('auth_token');
         const savedUserStr = await AsyncStorage.getItem('auth_user');
 
-        if (savedToken && savedUserStr) {
+        if (
+          savedToken &&
+          savedToken !== 'dev-fallback-token' &&
+          savedToken !== 'demo-jwt-token' &&
+          savedToken.split('.').length === 3 &&
+          savedUserStr
+        ) {
           const parsed = JSON.parse(savedUserStr);
           setUser(parsed);
           setToken(savedToken);
@@ -140,6 +147,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch (_) {
             // keep cached user
           }
+        } else {
+          setUser(DEMO_USER);
+          setToken('demo-jwt-token');
         }
       } catch (err) {
         console.warn('[auth] Could not load stored auth:', err);
@@ -152,53 +162,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string, role?: string): Promise<UserDto> => {
-    try {
-      const res = await authApi.login({ email, password, role });
-      setUser(res.user);
-      setToken(res.token);
-      await AsyncStorage.setItem('auth_token', res.token);
-      await AsyncStorage.setItem('auth_user', JSON.stringify(res.user));
-      return res.user;
-    } catch (error) {
-      // If server is unreachable during offline dev/demo, update local user
-      if (email.includes('kasun') || email.includes('donor')) {
-        const fallback = { ...DEMO_USER, email, role: (role as any) || 'donor' };
-        setUser(fallback);
-        setToken('dev-fallback-token');
-        await AsyncStorage.setItem('auth_token', 'dev-fallback-token');
-        await AsyncStorage.setItem('auth_user', JSON.stringify(fallback));
-        return fallback;
-      }
-      throw error;
-    }
+    const res = await authApi.login({ email, password, role });
+    setUser(res.user);
+    setToken(res.token);
+    await AsyncStorage.setItem('auth_token', res.token);
+    await AsyncStorage.setItem('auth_user', JSON.stringify(res.user));
+    return res.user;
   };
 
   const register = async (payload: Record<string, unknown>): Promise<UserDto> => {
-    try {
-      const res = await authApi.register(payload);
-      setUser(res.user);
-      setToken(res.token);
-      await AsyncStorage.setItem('auth_token', res.token);
-      await AsyncStorage.setItem('auth_user', JSON.stringify(res.user));
-      return res.user;
-    } catch (error) {
-      // Offline fallback creation
-      const fallback: UserDto = {
-        ...DEMO_USER,
-        name: String(payload.name || 'New Donor'),
-        email: String(payload.email || 'donor@lifeline.lk'),
-        bloodGroup: String(payload.bloodGroup || 'O+'),
-        phone: String(payload.phone || '+94 77 000 0000'),
-        district: String(payload.district || 'Colombo'),
-        city: String(payload.city || 'Colombo 07'),
-        role: (payload.role as any) || 'donor',
-      };
-      setUser(fallback);
-      setToken('dev-fallback-token');
-      await AsyncStorage.setItem('auth_token', 'dev-fallback-token');
-      await AsyncStorage.setItem('auth_user', JSON.stringify(fallback));
-      return fallback;
-    }
+    const res = await authApi.register(payload);
+    setUser(res.user);
+    setToken(res.token);
+    await AsyncStorage.setItem('auth_token', res.token);
+    await AsyncStorage.setItem('auth_user', JSON.stringify(res.user));
+    return res.user;
   };
 
   const logout = async () => {

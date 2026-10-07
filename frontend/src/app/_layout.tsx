@@ -13,11 +13,13 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)/launch" />
           <Stack.Screen name="(auth)/onboarding" />
           <Stack.Screen name="(auth)/login" />
-          <Stack.Screen name="(auth)/verify-otp" />
+          {/* OTP verification disabled as requested */}
+          {/* <Stack.Screen name="(auth)/verify-otp" /> */}
           <Stack.Screen name="(auth)/forgot-password" />
           <Stack.Screen name="(auth)/register" />
           <Stack.Screen name="(auth)/donor-details" />
           <Stack.Screen name="(auth)/complete-profile" />
+          <Stack.Screen name="dashboard/index" />
           <Stack.Screen name="profile/index" />
           <Stack.Screen name="profile/edit" />
           <Stack.Screen name="profile/eligibility" />

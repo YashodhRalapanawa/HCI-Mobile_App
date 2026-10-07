@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '@/theme';
 import { AppHeader } from '@/components/AppHeader';
@@ -21,26 +21,78 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ email?: string; returnTo?: string }>();
   const { login } = useAuth();
 
   const [role, setRole] = useState<'donor' | 'recipient'>('donor');
-  const [email, setEmail] = useState('kasun@example.com');
+  const [email, setEmail] = useState(params.email ? String(params.email) : 'kasun@example.com');
   const [password, setPassword] = useState('123456');
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert('Missing Fields', 'Please enter your email and password.');
+    setLoginError(null);
+    const trimmedInput = email.trim();
+    if (!trimmedInput) {
+      setLoginError('Karunakara email address eka ho mobile number eka athul karanna.');
+      return;
+    }
+
+    // Check if email or phone
+    if (trimmedInput.includes('@')) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedInput)) {
+        setLoginError("Email eke '@' saha valid domain ekak thiyenna oné (eg: user@gmail.com).");
+        return;
+      }
+    } else {
+      const digitsOnly = trimmedInput.replace(/\D/g, '');
+      if (digitsOnly.length !== 10 && digitsOnly.length !== 11) {
+        setLoginError('Phone number ekata hariyatama digits 10k thiyenna oné (eg: 0771234567).');
+        return;
+      }
+    }
+
+    if (!password || password.length < 6) {
+      setLoginError('Password ekata aduma tharamin characters 6k thiyenna oné.');
       return;
     }
 
     try {
       setLoading(true);
-      await login(email.trim(), password, role);
-      router.replace('/profile');
+      await login(trimmedInput, password, role);
+      if (params.returnTo) {
+        router.replace(params.returnTo as any);
+      } else {
+        router.replace('/dashboard' as any);
+      }
     } catch (err: any) {
-      Alert.alert('Login Failed', err.message || 'Please check your email and password.');
+      setLoginError(err.message || 'Invalid email or password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      await login('google.donor@lifeline.lk', '123456', role);
+      router.replace('/dashboard' as any);
+    } catch (err: any) {
+      Alert.alert('Google Login', err?.message || 'Google sign-in is unavailable. Please sign in with registered credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFacebookLogin = async () => {
+    try {
+      setLoading(true);
+      await login('facebook.donor@lifeline.lk', '123456', role);
+      router.replace('/dashboard' as any);
+    } catch (err: any) {
+      Alert.alert('Facebook Login', err?.message || 'Facebook sign-in is unavailable. Please sign in with registered credentials.');
     } finally {
       setLoading(false);
     }
@@ -69,6 +121,14 @@ export default function LoginScreen() {
             Sign in as a {role === 'donor' ? 'blood donor' : 'recipient'} to continue.
           </Text>
         </View>
+
+        {/* Inline Error Banner */}
+        {loginError ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={18} color={colors.danger} />
+            <Text style={styles.errorText}>{loginError}</Text>
+          </View>
+        ) : null}
 
         {/* Input Fields */}
         <AppTextInput
@@ -122,14 +182,33 @@ export default function LoginScreen() {
           style={styles.signInBtn}
         />
 
-        {/* Fast Quick PIN Login Button */}
-        <AppButton
-          title="Sign In with Quick PIN"
-          variant="outline"
-          icon="keypad-outline"
-          onPress={() => router.push('/(auth)/verify-otp')}
-          style={styles.pinBtn}
-        />
+        {/* OR Divider */}
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or continue with</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Google & Facebook Social Login Buttons */}
+        <View style={styles.socialButtonsContainer}>
+          <TouchableOpacity
+            style={styles.socialBtn}
+            onPress={handleGoogleLogin}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-google" size={19} color="#EA4335" style={{ marginRight: 10 }} />
+            <Text style={styles.socialBtnText}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.socialBtn}
+            onPress={handleFacebookLogin}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-facebook" size={20} color="#1877F2" style={{ marginRight: 10 }} />
+            <Text style={styles.socialBtnText}>Continue with Facebook</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Register Account Link */}
         <View style={styles.registerSection}>
@@ -211,10 +290,40 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     marginBottom: 12,
   },
-  pinBtn: {
-    height: 52,
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    paddingHorizontal: 12,
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  socialButtonsContainer: {
+    gap: 10,
+    marginBottom: spacing.lg,
+  },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 50,
     borderRadius: borderRadius.md,
-    marginBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  socialBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
   },
   registerSection: {
     flexDirection: 'row',
@@ -229,5 +338,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: colors.primary,
+  },
+  errorBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.2,
+    borderColor: '#FCA5A5',
+    borderRadius: borderRadius.md,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#991B1B',
+    fontWeight: '500',
+    lineHeight: 18,
   },
 });

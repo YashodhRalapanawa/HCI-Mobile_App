@@ -4,11 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
+import mongoose from 'mongoose';
 import { createApp } from '../src/app.js';
+import { env } from '../src/config/env.js';
+import { User } from '../src/modules/users/user.model.js';
+import { BloodRequest } from '../src/modules/requests/request.model.js';
 import { createBloodRequestSchema } from '../src/modules/requests/request.validation.js';
 import {
   validateFileSignature,
   removeUploadedFile,
+  UPLOAD_DIR,
 } from '../src/modules/requests/upload.middleware.js';
 import { SAMPLE_HOSPITALS } from '../src/modules/requests/hospital.data.js';
 
@@ -189,5 +194,169 @@ test('HTTP Request Routes Integration', async (t) => {
       },
     });
     assert.equal(res.status, 401);
+  });
+
+  await t.test('POST /api/requests with dev-fallback-token returns 401', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/requests`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer dev-fallback-token',
+      },
+    });
+    assert.equal(res.status, 401);
+    const body = (await res.json()) as { message: string };
+    assert.match(body.message, /invalid or expired/i);
+  });
+
+  await t.test('Authentication & Member2.1 Submission with Isolated Test User', async (subT) => {
+    if (!env.MONGODB_URI) {
+      subT.skip('MONGODB_URI not configured, skipping DB-backed integration tests');
+      return;
+    }
+
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(env.MONGODB_URI);
+    }
+
+    const testEmail = `test-runner-${Date.now()}@test.local`;
+    const testPassword = 'test-password-123';
+    let createdUserId: string | null = null;
+    let realJwtToken: string | null = null;
+    let createdRequestId: string | null = null;
+    let uploadedStorageKey: string | null = null;
+
+    try {
+      // 1. Failed login test: non-existent credentials must return 401
+      await subT.test('Failed login with non-existent account returns 401 and does not authenticate', async () => {
+        const loginRes = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'nonexistent.user.999@test.local',
+            password: 'wrong-password',
+            role: 'donor',
+          }),
+        });
+        assert.equal(loginRes.status, 401);
+        const body = (await loginRes.json()) as { message: string };
+        assert.ok(body.message);
+      });
+
+      // 2. Register isolated test user
+      const regRes = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Test Runner User',
+          email: testEmail,
+          password: testPassword,
+          role: 'donor',
+          bloodGroup: 'B-',
+          phone: '+94 77 999 8888',
+        }),
+      });
+      assert.equal(regRes.status, 201);
+      const regData = (await regRes.json()) as { token: string; user: { id: string } };
+      createdUserId = regData.user.id;
+      realJwtToken = regData.token;
+
+      // 3. Successful login test: valid credentials return 200 with JWT
+      await subT.test('Successful login returns real JWT token and user profile', async () => {
+        const loginRes = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: testEmail,
+            password: testPassword,
+            role: 'donor',
+          }),
+        });
+        assert.equal(loginRes.status, 200);
+        const loginData = (await loginRes.json()) as { token: string; user: { email: string } };
+        assert.ok(loginData.token);
+        assert.equal(loginData.token.split('.').length, 3);
+        assert.equal(loginData.user.email, testEmail);
+        realJwtToken = loginData.token;
+      });
+
+      // 4. Access protected endpoint with real JWT
+      await subT.test('Protected endpoint GET /api/users/me accessible with real JWT', async () => {
+        const profileRes = await fetch(`http://127.0.0.1:${port}/api/users/me`, {
+          headers: {
+            Authorization: `Bearer ${realJwtToken}`,
+          },
+        });
+        assert.equal(profileRes.status, 200);
+        const profileData = (await profileRes.json()) as { user: { email: string } };
+        assert.equal(profileData.user.email, testEmail);
+      });
+
+      // 5. Submit valid Member 2.1 request with harmless test document
+      await subT.test('Authenticated Member2.1 request with valid PDF document persists in MongoDB', async () => {
+        const formData = new FormData();
+        formData.append('patientName', 'N. Perera');
+        formData.append('bloodGroup', 'B-');
+        formData.append('unitsRequired', '3');
+        formData.append('hospitalId', 'hosp-colombo-city');
+        formData.append('hospitalReferenceAndWard', 'REQ-2026-024 / Ward 05');
+        formData.append('urgency', 'Urgent');
+
+        // Harmless test PDF bytes (%PDF-1.4 header)
+        const samplePdfContent = Buffer.from('%PDF-1.4\n%harmless sample test hospital document\n%%EOF');
+        formData.append(
+          'document',
+          new Blob([samplePdfContent], { type: 'application/pdf' }),
+          'hospital-req-sample.pdf',
+        );
+
+        const createRes = await fetch(`http://127.0.0.1:${port}/api/requests`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${realJwtToken}`,
+          },
+          body: formData,
+        });
+
+        assert.equal(createRes.status, 201);
+        const createData = (await createRes.json()) as {
+          message: string;
+          request: {
+            id: string;
+            patientName: string;
+            status: string;
+            hospitalName: string;
+            unitsRequired: number;
+            document: { originalName: string };
+          };
+        };
+
+        assert.equal(createData.request.patientName, 'N. Perera');
+        assert.equal(createData.request.status, 'pending_verification');
+        assert.equal(createData.request.unitsRequired, 3);
+        assert.equal(createData.request.document.originalName, 'hospital-req-sample.pdf');
+        createdRequestId = createData.request.id;
+
+        // Verify database persistence and ownership
+        const savedDoc = await BloodRequest.findById(createdRequestId);
+        assert.ok(savedDoc);
+        assert.equal(savedDoc.requesterId.toString(), createdUserId);
+        assert.equal(savedDoc.status, 'pending_verification');
+        assert.equal(savedDoc.unitsFulfilled, 0);
+        uploadedStorageKey = savedDoc.document.storageKey;
+      });
+    } finally {
+      // Clean up isolated test data
+      if (createdRequestId) {
+        await BloodRequest.findByIdAndDelete(createdRequestId);
+      }
+      if (uploadedStorageKey) {
+        const filePath = path.join(UPLOAD_DIR, uploadedStorageKey);
+        removeUploadedFile(filePath);
+      }
+      if (createdUserId) {
+        await User.findByIdAndDelete(createdUserId);
+      }
+      await mongoose.disconnect();
+    }
   });
 });
