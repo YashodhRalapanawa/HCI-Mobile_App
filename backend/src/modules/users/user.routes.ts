@@ -10,8 +10,8 @@ userRouter.get('/me', authenticate, async (req: AuthenticatedRequest, res: Respo
   res.status(200).json({ user: sanitizeUser(req.user!) });
 });
 
-// 2. UPDATE USER PROFILE
-userRouter.patch('/me', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// 2. UPDATE USER PROFILE (Supports both PUT and PATCH)
+const handleUpdateProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const user = req.user!;
     const {
@@ -23,6 +23,7 @@ userRouter.patch('/me', authenticate, async (req: AuthenticatedRequest, res: Res
       dateOfBirth,
       gender,
       weight,
+      avatarUrl,
       preferences,
     } = req.body;
 
@@ -34,6 +35,7 @@ userRouter.patch('/me', authenticate, async (req: AuthenticatedRequest, res: Res
     if (dateOfBirth) user.dateOfBirth = new Date(dateOfBirth);
     if (gender) user.gender = gender;
     if (weight !== undefined) user.weight = Number(weight);
+    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
     if (preferences) {
       user.preferences = { ...user.preferences, ...preferences };
     }
@@ -47,7 +49,10 @@ userRouter.patch('/me', authenticate, async (req: AuthenticatedRequest, res: Res
     console.error('[users] Update error:', error);
     res.status(500).json({ message: 'Failed to update profile.' });
   }
-});
+};
+
+userRouter.put('/me', authenticate, handleUpdateProfile);
+userRouter.patch('/me', authenticate, handleUpdateProfile);
 
 // 3. TOGGLE AVAILABILITY
 userRouter.patch('/me/availability', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {

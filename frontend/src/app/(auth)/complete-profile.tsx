@@ -60,20 +60,22 @@ export default function CompleteProfileScreen() {
       });
 
       Alert.alert(
-        'Profile Created!',
-        'Your blood donor profile is ready. Let us verify your phone number.',
+        'Profile Created Successfully!',
+        'Your blood donor profile is ready! Welcome to the LifeLine LK community.',
         [
           {
-            text: 'Verify Phone',
-            onPress: () => router.push('/(auth)/verify-otp'),
+            text: 'Go to Dashboard',
+            onPress: () => router.replace('/dashboard' as any),
           },
         ],
       );
     } catch (err: any) {
-      Alert.alert('Registration Notice', err.message || 'Continuing to verification...', [
+      // OTP verification bypassed as requested
+      // router.push('/(auth)/verify-otp')
+      Alert.alert('Registration Notice', err.message || 'Continuing to dashboard...', [
         {
-          text: 'Continue',
-          onPress: () => router.push('/(auth)/verify-otp'),
+          text: 'Go to Dashboard',
+          onPress: () => router.replace('/dashboard' as any),
         },
       ]);
     } finally {

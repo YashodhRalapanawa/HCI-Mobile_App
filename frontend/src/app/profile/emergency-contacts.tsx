@@ -18,6 +18,7 @@ import { AppButton } from '@/components/AppButton';
 import { BottomNavBar } from '@/components/BottomNavBar';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { makePhoneCall } from '@/utils/phone';
 
 export default function EmergencyContactsScreen() {
   const router = useRouter();
@@ -128,6 +129,13 @@ export default function EmergencyContactsScreen() {
                   {contact.relationship} · {contact.phone}
                 </Text>
               </View>
+              <TouchableOpacity
+                onPress={() => makePhoneCall(contact.phone, contact.name)}
+                style={styles.callContactBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="call" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => handleDelete(contact._id)}
                 style={styles.trashBtn}
@@ -291,6 +299,15 @@ const styles = StyleSheet.create({
   },
   trashBtn: {
     padding: 6,
+  },
+  callContactBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
   },
   cardDivider: {
     height: 1,

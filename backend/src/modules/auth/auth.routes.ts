@@ -19,6 +19,7 @@ export function sanitizeUser(user: UserDocument) {
     phone: user.phone ?? '',
     bloodGroup: user.bloodGroup,
     role: user.role,
+    avatarUrl: user.avatarUrl ?? '',
     gender: user.gender ?? 'Male',
     dateOfBirth: user.dateOfBirth?.toISOString() ?? '',
     weight: user.weight ?? 65,

@@ -1,6 +1,8 @@
 import React from 'react';
 import {
   Alert,
+  Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -28,16 +30,30 @@ export default function MyProfileScreen() {
     }
   };
 
-  const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to log out of LifeLine LK?', [
+  const handleLogout = async () => {
+    const performSignOut = async () => {
+      try {
+        await logout();
+        router.replace('/(auth)/login');
+      } catch (e) {
+        console.error('Logout error:', e);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' ? window.confirm('Are you sure you want to sign out of LifeLine LK?') : true;
+      if (confirmed) {
+        await performSignOut();
+      }
+      return;
+    }
+
+    Alert.alert('Sign Out', 'Are you sure you want to sign out of LifeLine LK?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/(auth)/login');
-        },
+        onPress: performSignOut,
       },
     ]);
   };
@@ -115,13 +131,17 @@ export default function MyProfileScreen() {
         {/* Profile Card Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarInitials}>
-              {user?.name
-                ?.split(' ')
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join('') || 'KP'}
-            </Text>
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitials}>
+                {user?.name
+                  ?.split(' ')
+                  .map((n) => n[0])
+                  .slice(0, 2)
+                  .join('') || 'KP'}
+              </Text>
+            )}
             <View style={styles.cameraBadge}>
               <Ionicons name="shield-checkmark" size={14} color="#FFFFFF" />
             </View>
@@ -259,6 +279,11 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '900',
     color: '#FFFFFF',
+  },
+  avatarImage: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
   },
   cameraBadge: {
     position: 'absolute',

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Image,
   Modal,
   Platform,
   SafeAreaView,
@@ -17,6 +18,7 @@ import { shadows } from '@/theme';
 import { BottomNavBar } from '@/components/BottomNavBar';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { makePhoneCall } from '@/utils/phone';
 
 interface NearbyRequest {
   id: string;
@@ -116,7 +118,10 @@ export default function DashboardScreen() {
       'Blood Donation Response Confirmed',
       'Thank you! The Blood Bank at Colombo National Hospital has been notified of your response. Please head to Regent St, Colombo 08.',
       [
-        { text: 'Call Blood Bank', onPress: () => Alert.alert('Calling...', '+94 11 269 1111') },
+        {
+          text: 'Call Blood Bank',
+          onPress: () => makePhoneCall('+94112691111', 'Colombo National Hospital Blood Bank'),
+        },
         { text: 'Done' },
       ],
     );
@@ -139,7 +144,11 @@ export default function DashboardScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{initials}</Text>
+                {user?.avatarUrl ? (
+                  <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>{initials}</Text>
+                )}
               </View>
               <View style={styles.greetingContainer}>
                 <Text style={styles.greetingText}>Good morning,</Text>
@@ -421,7 +430,7 @@ export default function DashboardScreen() {
                   <TouchableOpacity
                     style={styles.callHospitalBtn}
                     onPress={() => {
-                      Alert.alert('Connecting Call', 'Calling Colombo National Hospital Blood Bank: +94 11 269 1111');
+                      makePhoneCall('+94112691111', 'Colombo National Hospital Blood Bank');
                     }}
                     activeOpacity={0.8}
                   >
@@ -492,7 +501,7 @@ export default function DashboardScreen() {
                   <TouchableOpacity
                     style={styles.callHospitalBtn}
                     onPress={() => {
-                      Alert.alert('Calling Contact', `Direct dial: ${selectedRequest?.contact}`);
+                      makePhoneCall(selectedRequest?.contact || '+94112691111', (selectedRequest?.hospital || 'Hospital') + ' Coordinator');
                     }}
                     activeOpacity={0.8}
                   >
@@ -609,6 +618,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   greetingContainer: {
     justifyContent: 'center',

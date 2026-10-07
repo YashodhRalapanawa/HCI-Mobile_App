@@ -26,6 +26,7 @@ const DEMO_USER: UserDto = {
   phone: '+94 77 123 4567',
   bloodGroup: 'O+',
   role: 'donor',
+  avatarUrl: '',
   gender: 'Male',
   dateOfBirth: '1998-05-15',
   weight: 68,

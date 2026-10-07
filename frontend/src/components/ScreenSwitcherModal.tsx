@@ -23,7 +23,7 @@ export const MEMBER_1_SCREENS: ScreenItem[] = [
   { id: 1, title: 'Launch / Splash', route: '/(auth)/launch', category: 'auth', figmaName: 'Member 1 — Launch' },
   { id: 2, title: 'Onboarding (Fast Matching)', route: '/(auth)/onboarding', category: 'auth', figmaName: 'Member 1 — Onboarding' },
   { id: 3, title: 'Login With Us', route: '/(auth)/login', category: 'auth', figmaName: 'Member 1 — Login' },
-  { id: 4, title: 'OTP Verification', route: '/(auth)/verify-otp', category: 'auth', figmaName: 'Member 1 — OTP Phone' },
+  // { id: 4, title: 'OTP Verification (Bypassed)', route: '/(auth)/verify-otp', category: 'auth', figmaName: 'Member 1 — OTP Phone' },
   { id: 5, title: 'Forgot / Reset Password', route: '/(auth)/forgot-password', category: 'auth', figmaName: 'Member 1 — Forgot Password' },
   { id: 6, title: 'Register Account (Step 1)', route: '/(auth)/register', category: 'auth', figmaName: 'Member 1 — Register' },
   { id: 7, title: 'Donor Details (Step 2)', route: '/(auth)/donor-details', category: 'auth', figmaName: 'Member 1 — Donor Details' },

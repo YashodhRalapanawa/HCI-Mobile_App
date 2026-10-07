@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -43,16 +44,30 @@ export default function SettingsScreen() {
     } catch (_) {}
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const performSignOut = async () => {
+      try {
+        await logout();
+        router.replace('/(auth)/login');
+      } catch (e) {
+        console.error('Logout error:', e);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' ? window.confirm('Are you sure you want to log out?') : true;
+      if (confirmed) {
+        await performSignOut();
+      }
+      return;
+    }
+
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/(auth)/login');
-        },
+        onPress: performSignOut,
       },
     ]);
   };
