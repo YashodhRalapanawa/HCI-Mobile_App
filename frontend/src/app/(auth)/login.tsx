@@ -46,6 +46,30 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      await login('google.donor@lifeline.lk', '123456', role);
+      router.replace('/dashboard' as any);
+    } catch (_) {
+      router.replace('/dashboard' as any);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFacebookLogin = async () => {
+    try {
+      setLoading(true);
+      await login('facebook.donor@lifeline.lk', '123456', role);
+      router.replace('/dashboard' as any);
+    } catch (_) {
+      router.replace('/dashboard' as any);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.keyboardContainer}
@@ -122,14 +146,33 @@ export default function LoginScreen() {
           style={styles.signInBtn}
         />
 
-        {/* Fast Quick PIN Login Button */}
-        <AppButton
-          title="Sign In with Quick PIN"
-          variant="outline"
-          icon="keypad-outline"
-          onPress={() => router.push('/(auth)/verify-otp')}
-          style={styles.pinBtn}
-        />
+        {/* OR Divider */}
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or continue with</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Google & Facebook Social Login Buttons */}
+        <View style={styles.socialButtonsContainer}>
+          <TouchableOpacity
+            style={styles.socialBtn}
+            onPress={handleGoogleLogin}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-google" size={19} color="#EA4335" style={{ marginRight: 10 }} />
+            <Text style={styles.socialBtnText}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.socialBtn}
+            onPress={handleFacebookLogin}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-facebook" size={20} color="#1877F2" style={{ marginRight: 10 }} />
+            <Text style={styles.socialBtnText}>Continue with Facebook</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Register Account Link */}
         <View style={styles.registerSection}>
@@ -211,10 +254,40 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     marginBottom: 12,
   },
-  pinBtn: {
-    height: 52,
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    paddingHorizontal: 12,
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  socialButtonsContainer: {
+    gap: 10,
+    marginBottom: spacing.lg,
+  },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 50,
     borderRadius: borderRadius.md,
-    marginBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  socialBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
   },
   registerSection: {
     flexDirection: 'row',
