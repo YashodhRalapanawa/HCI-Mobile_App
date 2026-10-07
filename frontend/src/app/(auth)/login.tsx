@@ -38,7 +38,7 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       await login(email.trim(), password, role);
-      router.replace('/profile');
+      router.replace('/dashboard' as any);
     } catch (err: any) {
       Alert.alert('Login Failed', err.message || 'Please check your email and password.');
     } finally {

@@ -18,6 +18,7 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)/register" />
           <Stack.Screen name="(auth)/donor-details" />
           <Stack.Screen name="(auth)/complete-profile" />
+          <Stack.Screen name="dashboard/index" />
           <Stack.Screen name="profile/index" />
           <Stack.Screen name="profile/edit" />
           <Stack.Screen name="profile/eligibility" />
