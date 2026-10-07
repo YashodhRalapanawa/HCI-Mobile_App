@@ -57,4 +57,14 @@ export const requestApi = {
       body: formData,
     });
   },
+
+  getRequestById: async (token: string, id: string): Promise<CreatedRequestResponse> => {
+    const res = await apiRequest<{ request: CreatedRequestResponse }>(`requests/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return res.request;
+  },
 };

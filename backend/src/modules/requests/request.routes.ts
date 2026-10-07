@@ -1,5 +1,6 @@
 import { Router, type Response } from 'express';
 import multer from 'multer';
+import mongoose from 'mongoose';
 import { authenticate, type AuthenticatedRequest } from '../../middleware/auth.js';
 import { SAMPLE_HOSPITALS, getHospitalById } from './hospital.data.js';
 import { BloodRequest, type BloodRequestDocument } from './request.model.js';
@@ -149,6 +150,45 @@ requestRouter.post(
       res.status(500).json({
         message: 'An error occurred while saving the blood request. Please try again.',
       });
+    }
+  },
+);
+
+/**
+ * GET /api/requests/:id
+ * Retrieves owner-protected blood request detail summary.
+ * Authenticated via JWT. Checks requester ownership.
+ */
+requestRouter.get(
+  '/:id',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.isValidObjectId(id)) {
+        res.status(400).json({ message: 'Invalid request ID format.' });
+        return;
+      }
+
+      const bloodRequest = await BloodRequest.findById(id);
+      if (!bloodRequest) {
+        res.status(404).json({ message: 'Blood request not found.' });
+        return;
+      }
+
+      // Enforce owner-only access: only the original requester can view this request confirmation
+      if (bloodRequest.requesterId.toString() !== req.user!._id.toString()) {
+        res.status(403).json({ message: 'You do not have permission to view this request.' });
+        return;
+      }
+
+      res.status(200).json({
+        request: serializeRequest(bloodRequest),
+      });
+    } catch (error) {
+      console.error('[requests] Error fetching request by ID:', error);
+      res.status(500).json({ message: 'An error occurred while fetching the blood request.' });
     }
   },
 );

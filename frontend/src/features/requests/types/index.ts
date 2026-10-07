@@ -15,6 +15,13 @@ export interface SelectedDocument {
   file?: any;
 }
 
+export type RequestStatus =
+  | 'pending_verification'
+  | 'verified'
+  | 'in_progress'
+  | 'fulfilled'
+  | 'cancelled';
+
 export interface CreatedRequestResponse {
   id: string;
   patientName: string;
@@ -25,7 +32,7 @@ export interface CreatedRequestResponse {
   hospitalName: string;
   hospitalReferenceAndWard: string;
   urgency: UrgencyType;
-  status: 'pending_verification';
+  status: RequestStatus;
   document: {
     originalName: string;
     mimeType: string;

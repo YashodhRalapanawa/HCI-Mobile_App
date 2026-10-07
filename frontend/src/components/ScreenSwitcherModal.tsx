@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, borderRadius, spacing } from '@/theme';
 
@@ -39,6 +40,7 @@ export const MEMBER_1_SCREENS: ScreenItem[] = [
   { id: 17, title: 'Account Settings & Privacy', route: '/profile/settings', category: 'profile', figmaName: 'Member 1 — Settings & Privacy' },
   { id: 18, title: 'Public Donor Profile View', route: '/profile/public-preview', category: 'profile', figmaName: 'Member 1 — Public Donor View' },
   { id: 19, title: 'New Blood Request', route: '/requests/new', category: 'requests', figmaName: 'Member 2.1 — New Blood Request' },
+  { id: 20, title: 'Request Submitted (Confirmation)', route: '/requests/preview/submitted', category: 'requests', figmaName: 'Member 2.2 — Request Submitted' },
 ];
 
 interface ScreenSwitcherProps {
@@ -49,8 +51,19 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
   const [visible, setVisible] = useState(false);
   const router = useRouter();
 
-  const handleSelect = (route: string) => {
+  const handleSelect = async (route: string) => {
     setVisible(false);
+    if (route === '/requests/preview/submitted') {
+      try {
+        const latestId = await AsyncStorage.getItem('latest_submitted_request_id');
+        if (latestId) {
+          router.push(`/requests/${latestId}/submitted` as any);
+          return;
+        }
+      } catch {
+        // fallback
+      }
+    }
     router.push(route as any);
   };
 
@@ -58,6 +71,8 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
   const pillText =
     currentScreenId === 19
       ? 'Member 2.1'
+      : currentScreenId === 20
+      ? 'Member 2.2'
       : activeIndex !== -1
       ? `Screen ${activeIndex + 1}/${MEMBER_1_SCREENS.length}`
       : `Screen ${currentScreenId}`;
@@ -84,8 +99,8 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Member 1 Figma Screens</Text>
-                <Text style={styles.modalSubtitle}>All 17 Authentication & Profile Screens</Text>
+                <Text style={styles.modalTitle}>App Navigation & Screens</Text>
+                <Text style={styles.modalSubtitle}>Authentication, Profile & Requests Screens</Text>
               </View>
               <TouchableOpacity
                 onPress={() => setVisible(false)}

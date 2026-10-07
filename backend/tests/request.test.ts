@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
+import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { createApp } from '../src/app.js';
 import { env } from '../src/config/env.js';
@@ -208,6 +209,11 @@ test('HTTP Request Routes Integration', async (t) => {
     assert.match(body.message, /invalid or expired/i);
   });
 
+  await t.test('GET /api/requests/:id without authorization returns 401', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/requests/507f1f77bcf86cd799439011`);
+    assert.equal(res.status, 401);
+  });
+
   await t.test('Authentication & Member2.1 Submission with Isolated Test User', async (subT) => {
     if (!env.MONGODB_URI) {
       subT.skip('MONGODB_URI not configured, skipping DB-backed integration tests');
@@ -344,6 +350,96 @@ test('HTTP Request Routes Integration', async (t) => {
         assert.equal(savedDoc.unitsFulfilled, 0);
         uploadedStorageKey = savedDoc.document.storageKey;
       });
+
+      // 5. Invalid request ID format returns 400
+      await subT.test('GET /api/requests/:id with invalid ID format returns 400', async () => {
+        const invalidRes = await fetch(`http://127.0.0.1:${port}/api/requests/invalid-mongo-id`, {
+          headers: { Authorization: `Bearer ${realJwtToken}` },
+        });
+        assert.equal(invalidRes.status, 400);
+        const body = (await invalidRes.json()) as { message: string };
+        assert.match(body.message, /invalid request id/i);
+      });
+
+      // 6. Non-existent request ID returns 404
+      await subT.test('GET /api/requests/:id with non-existent ID returns 404', async () => {
+        const notFoundRes = await fetch(
+          `http://127.0.0.1:${port}/api/requests/507f1f77bcf86cd799439011`,
+          {
+            headers: { Authorization: `Bearer ${realJwtToken}` },
+          },
+        );
+        assert.equal(notFoundRes.status, 404);
+        const body = (await notFoundRes.json()) as { message: string };
+        assert.match(body.message, /not found/i);
+      });
+
+      // 7. Owner retrieval test (Member 2.2 detail query)
+      await subT.test('GET /api/requests/:id allows owner to retrieve request summary', async () => {
+        assert.ok(createdRequestId);
+        const getRes = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+          headers: {
+            Authorization: `Bearer ${realJwtToken}`,
+          },
+        });
+
+        assert.equal(getRes.status, 200);
+        const data = (await getRes.json()) as {
+          request: {
+            id: string;
+            patientName: string;
+            bloodGroup: string;
+            unitsRequired: number;
+            hospitalName: string;
+            hospitalReferenceAndWard: string;
+            urgency: string;
+            status: string;
+            document: { storageKey?: string };
+          };
+        };
+        assert.ok(data.request);
+        assert.equal(data.request.id, createdRequestId);
+        assert.equal(data.request.patientName, 'N. Perera');
+        assert.equal(data.request.bloodGroup, 'B-');
+        assert.equal(data.request.unitsRequired, 3);
+        assert.equal(data.request.hospitalName, 'City Hospital, Colombo');
+        assert.equal(data.request.hospitalReferenceAndWard, 'REQ-2026-024 / Ward 05');
+        assert.equal(data.request.urgency, 'Urgent');
+        assert.equal(data.request.status, 'pending_verification');
+        // Ensure storageKey is not exposed
+        assert.equal(data.request.document.storageKey, undefined);
+      });
+
+      // 8. Non-owner rejection test (403 Forbidden)
+      let secondUserId: string | null = null;
+      try {
+        const secondUser = await User.create({
+          name: 'Second Test User',
+          email: `second-runner-${Date.now()}@test.local`,
+          passwordHash: 'dummy-hash',
+          bloodGroup: 'A+',
+          district: 'Colombo',
+        });
+        secondUserId = secondUser._id.toString();
+        const secondUserToken = jwt.sign({ id: secondUserId }, env.JWT_SECRET);
+
+        await subT.test('GET /api/requests/:id rejects non-owner with 403', async () => {
+          assert.ok(createdRequestId);
+          const getRes = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+            headers: {
+              Authorization: `Bearer ${secondUserToken}`,
+            },
+          });
+
+          assert.equal(getRes.status, 403);
+          const body = (await getRes.json()) as { message: string };
+          assert.match(body.message, /permission/i);
+        });
+      } finally {
+        if (secondUserId) {
+          await User.findByIdAndDelete(secondUserId);
+        }
+      }
     } finally {
       // Clean up isolated test data
       if (createdRequestId) {

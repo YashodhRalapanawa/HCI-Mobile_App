@@ -30,7 +30,6 @@ import type {
   UrgencyType,
   SelectedDocument,
   HospitalOption,
-  CreatedRequestResponse,
 } from '../types';
 
 const DRAFT_STORAGE_KEY = 'lifeline_request_draft_v1';
@@ -63,7 +62,6 @@ export function NewRequestScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [submittedRequest, setSubmittedRequest] = useState<CreatedRequestResponse | null>(null);
 
   const isRealSession = Boolean(
     token &&
@@ -87,7 +85,9 @@ export function NewRequestScreen() {
           if (parsed.hospitalReferenceAndWard) setHospitalReferenceAndWard(parsed.hospitalReferenceAndWard);
           if (parsed.urgency) setUrgency(parsed.urgency);
         }
-      } catch (_) {}
+      } catch {
+        // ignore draft load error
+      }
     }
     void loadDraft();
   }, []);
@@ -105,13 +105,17 @@ export function NewRequestScreen() {
           urgency,
         }),
       );
-    } catch (_) {}
+    } catch {
+      // ignore draft save error
+    }
   };
 
   const clearDraft = async () => {
     try {
       await AsyncStorage.removeItem(DRAFT_STORAGE_KEY);
-    } catch (_) {}
+    } catch {
+      // ignore draft clear error
+    }
   };
 
   // Fetch live hospitals from backend on mount
@@ -192,7 +196,14 @@ export function NewRequestScreen() {
       });
 
       await clearDraft();
-      setSubmittedRequest(response.request);
+      try {
+        await AsyncStorage.setItem('latest_submitted_request_id', response.request.id);
+      } catch {
+        // ignore storage error
+      }
+
+      // Replace navigation so Back does not reopen the submitted form
+      router.replace(`/requests/${response.request.id}/submitted` as any);
     } catch (err: any) {
       const isAuthError =
         err?.status === 401 ||
@@ -216,17 +227,6 @@ export function NewRequestScreen() {
     }
   };
 
-  const handleResetForm = async () => {
-    await clearDraft();
-    setSubmittedRequest(null);
-    setPatientName('');
-    setBloodGroup('O+');
-    setUnitsRequired(1);
-    setHospitalReferenceAndWard('');
-    setDocument(null);
-    setErrors({});
-    setSubmitError(null);
-  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -266,7 +266,7 @@ export function NewRequestScreen() {
           </View>
 
           {/* Demo Auth Banner */}
-          {isDemoAuth && !submittedRequest && (
+          {isDemoAuth && (
             <View style={styles.demoBanner}>
               <Ionicons name="information-circle" size={18} color="#B45309" />
               <Text style={styles.demoBannerText}>
@@ -287,99 +287,8 @@ export function NewRequestScreen() {
             </View>
           )}
 
-          {/* Inline Temporary Success Card (Scope: Member 2.1) */}
-          {submittedRequest ? (
-            <View style={styles.successCard}>
-              <View style={styles.successIconBox}>
-                <Ionicons name="checkmark-circle" size={54} color={colors.primary} />
-              </View>
-
-              <Text style={styles.successTitle}>Request submitted</Text>
-              <Text style={styles.successSubtitle}>
-                Awaiting hospital verification
-              </Text>
-
-              <View style={styles.successDetailBox}>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Reference ID</Text>
-                  <Text style={styles.detailValue} numberOfLines={1}>
-                    {submittedRequest.id}
-                  </Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Patient</Text>
-                  <Text style={styles.detailValue}>
-                    {submittedRequest.patientName} ({submittedRequest.unitsRequired} units of {submittedRequest.bloodGroup})
-                  </Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Hospital</Text>
-                  <Text style={styles.detailValue}>{submittedRequest.hospitalName}</Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Ward / Ref</Text>
-                  <Text style={styles.detailValue}>
-                    {submittedRequest.hospitalReferenceAndWard}
-                  </Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Urgency</Text>
-                  <View
-                    style={[
-                      styles.urgencyBadge,
-                      submittedRequest.urgency === 'Urgent'
-                        ? styles.urgencyBadgeUrgent
-                        : styles.urgencyBadgeScheduled,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.urgencyBadgeText,
-                        submittedRequest.urgency === 'Urgent'
-                          ? styles.urgencyBadgeTextUrgent
-                          : styles.urgencyBadgeTextScheduled,
-                      ]}
-                    >
-                      {submittedRequest.urgency}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Verification Doc</Text>
-                  <Text style={styles.detailValue} numberOfLines={1}>
-                    {submittedRequest.document.originalName}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.successActions}>
-                <TouchableOpacity
-                  style={styles.newRequestBtn}
-                  onPress={handleResetForm}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.newRequestBtnText}>Create another request</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.profileBtn}
-                  onPress={() => router.replace('/profile')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.profileBtnText}>Go to Profile</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            /* Main Member 2.1 Request Form */
-            <>
-              {/* CARD 1: PATIENT AND BLOOD DETAILS */}
+          {/* Main Member 2.1 Request Form */}
+          {/* CARD 1: PATIENT AND BLOOD DETAILS */}
               <View style={styles.card}>
                 <Text style={styles.cardHeader}>PATIENT AND BLOOD DETAILS</Text>
 
@@ -530,8 +439,6 @@ export function NewRequestScreen() {
                   <Text style={styles.submitButtonText}>SUBMIT REQUEST</Text>
                 )}
               </TouchableOpacity>
-            </>
-          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
