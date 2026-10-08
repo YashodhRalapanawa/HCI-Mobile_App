@@ -61,9 +61,11 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-      await login(trimmedInput, password, role);
+      const loggedUser = await login(trimmedInput, password, role);
       if (params.returnTo) {
         router.replace(params.returnTo as any);
+      } else if (loggedUser.role === 'donor') {
+        router.replace('/donor/dashboard' as any);
       } else {
         router.replace('/dashboard' as any);
       }
@@ -77,8 +79,12 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
-      await login('google.donor@lifeline.lk', '123456', role);
-      router.replace('/dashboard' as any);
+      const gUser = await login('google.donor@lifeline.lk', '123456', role);
+      if (gUser.role === 'donor') {
+        router.replace('/donor/dashboard' as any);
+      } else {
+        router.replace('/dashboard' as any);
+      }
     } catch (err: any) {
       Alert.alert('Google Login', err?.message || 'Google sign-in is unavailable. Please sign in with registered credentials.');
     } finally {
@@ -89,8 +95,12 @@ export default function LoginScreen() {
   const handleFacebookLogin = async () => {
     try {
       setLoading(true);
-      await login('facebook.donor@lifeline.lk', '123456', role);
-      router.replace('/dashboard' as any);
+      const fbUser = await login('facebook.donor@lifeline.lk', '123456', role);
+      if (fbUser.role === 'donor') {
+        router.replace('/donor/dashboard' as any);
+      } else {
+        router.replace('/dashboard' as any);
+      }
     } catch (err: any) {
       Alert.alert('Facebook Login', err?.message || 'Facebook sign-in is unavailable. Please sign in with registered credentials.');
     } finally {

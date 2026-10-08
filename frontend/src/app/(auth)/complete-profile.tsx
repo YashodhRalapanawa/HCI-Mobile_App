@@ -42,7 +42,7 @@ export default function CompleteProfileScreen() {
     setIsConflict(false);
     try {
       setLoading(true);
-      await register({
+      const registered = await register({
         name: params.name,
         email: params.email,
         password: params.password,
@@ -62,7 +62,11 @@ export default function CompleteProfileScreen() {
         },
       });
 
-      router.replace('/dashboard' as any);
+      if (registered?.role === 'donor') {
+        router.replace('/donor/dashboard' as any);
+      } else {
+        router.replace('/dashboard' as any);
+      }
     } catch (err: any) {
       const msg = err?.message || 'Failed to complete registration.';
       const conflict =

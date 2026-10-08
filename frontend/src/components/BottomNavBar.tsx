@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme';
+import { useAuth } from '@/features/auth/context/AuthContext';
 
 interface BottomNavBarProps {
   activeTab?: 'home' | 'search' | 'alerts' | 'profile';
@@ -10,13 +11,22 @@ interface BottomNavBarProps {
 
 export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
   const router = useRouter();
+  const { user } = useAuth();
+
+  const handleHomePress = () => {
+    if (user?.role === 'donor') {
+      router.replace('/donor/dashboard' as any);
+    } else {
+      router.replace('/dashboard' as any);
+    }
+  };
 
   return (
     <View style={styles.container}>
       {/* Home Tab */}
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => router.replace('/dashboard' as any)}
+        onPress={handleHomePress}
         activeOpacity={0.7}
       >
         <View style={activeTab === 'home' ? styles.activeHomeIconContainer : styles.iconContainer}>

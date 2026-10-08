@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -70,7 +70,13 @@ const INITIAL_REQUESTS: NearbyRequest[] = [
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, token, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && token && token !== 'demo-jwt-token' && user?.role === 'donor') {
+      router.replace('/donor/dashboard' as any);
+    }
+  }, [isLoading, token, user?.role, router]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<NearbyRequest | null>(null);

@@ -4,6 +4,7 @@ import { isDatabaseConnected } from './config/database.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { userRouter } from './modules/users/user.routes.js';
 import { requestRouter } from './modules/requests/request.routes.js';
+import { donationRequestRouter } from './modules/donors/donationRequest.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -36,6 +37,9 @@ export function createApp(): Express {
 
   // Member 2 Feature Routes
   app.use('/api/requests', requestRouter);
+
+  // Member 3 Feature Routes (Donor)
+  app.use('/api/donation-requests', donationRequestRouter);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });
