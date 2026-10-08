@@ -32,7 +32,7 @@ export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
       {/* Search Tab */}
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => router.push('/profile/public-preview' as any)}
+        onPress={() => router.push('/find-donors')}
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
@@ -48,7 +48,7 @@ export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
       {/* Alerts Tab */}
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => router.push('/profile/emergency-contacts' as any)}
+        onPress={() => router.push('/notifications')}
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>

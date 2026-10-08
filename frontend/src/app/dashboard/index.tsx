@@ -257,7 +257,7 @@ export default function DashboardScreen() {
             {/* Find Blood Donor */}
             <TouchableOpacity
               style={styles.serviceCard}
-              onPress={() => router.push('/profile/public-preview' as any)}
+              onPress={() => router.push('/find-donors')}
               activeOpacity={0.7}
             >
               <View style={[styles.serviceIconBox, { backgroundColor: '#FEE2E2' }]}>
