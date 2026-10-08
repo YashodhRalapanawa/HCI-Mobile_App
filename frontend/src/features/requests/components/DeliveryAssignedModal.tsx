@@ -29,6 +29,7 @@ export interface DeliveryAssignedModalProps {
   loading?: boolean;
   errorMessage?: string | null;
   onRetry?: () => void;
+  onPressViewContact?: () => void;
   // Dev preview flag
   isDevPreview?: boolean;
 }
@@ -47,6 +48,7 @@ export function DeliveryAssignedModal({
   loading = false,
   errorMessage = null,
   onRetry,
+  onPressViewContact,
   isDevPreview = false,
 }: DeliveryAssignedModalProps) {
   const openerRef = useRef<any>(null);
@@ -227,21 +229,34 @@ export function DeliveryAssignedModal({
 
                 {/* Status Guidance Note */}
                 <Text style={styles.guidanceText}>
-                  Staff assignment confirmed. Direct courier contact and arrival verification will become available in the next step.
+                  Staff assignment confirmed. You can now view courier contact details and get in touch directly.
                 </Text>
 
-                {/* Next Step Action Button: Visibly disabled for Member 2.5 */}
-                <TouchableOpacity
-                  style={styles.disabledActionButton}
-                  disabled={true}
-                  activeOpacity={1}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: true }}
-                  accessibilityLabel="Contact details unavailable"
-                >
-                  <Ionicons name="call-outline" size={16} color="#94A3B8" style={{ marginRight: 6 }} />
-                  <Text style={styles.disabledActionText}>Contact details unavailable</Text>
-                </TouchableOpacity>
+                {/* Member 2.5 Action Button */}
+                {onPressViewContact ? (
+                  <TouchableOpacity
+                    style={styles.enabledActionButton}
+                    onPress={onPressViewContact}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="View delivery contact details"
+                  >
+                    <Ionicons name="call" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.enabledActionText}>VIEW CONTACT DETAILS</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.disabledActionButton}
+                    disabled={true}
+                    activeOpacity={1}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: true }}
+                    accessibilityLabel="Contact details unavailable"
+                  >
+                    <Ionicons name="call-outline" size={16} color="#94A3B8" style={{ marginRight: 6 }} />
+                    <Text style={styles.disabledActionText}>Contact details unavailable</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
 
@@ -481,6 +496,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
+  },
+  enabledActionButton: {
+    width: '100%',
+    backgroundColor: '#16A34A',
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    shadowColor: '#16A34A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  enabledActionText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
   },
   disabledActionText: {
     fontSize: 14,

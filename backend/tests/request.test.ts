@@ -1404,6 +1404,10 @@ test('HTTP Request Routes Integration', async (t) => {
               });
               assert.equal(detailRes.status, 200);
               const detailBody = (await detailRes.json()) as {
+                requestId: string;
+                bloodGroup: string;
+                patientName: string;
+                status: string;
                 deliveryAssignment: {
                   assignmentId: string;
                   deliveryPersonName: string;
@@ -1417,6 +1421,10 @@ test('HTTP Request Routes Integration', async (t) => {
               assert.equal(detailBody.deliveryAssignment.deliveryPersonName, 'Sunil Fernando');
               assert.equal(detailBody.deliveryAssignment.contactPhone, '+94 77 123 4567');
               assert.ok(detailBody.hospitalName);
+              assert.equal(detailBody.requestId, reqId);
+              assert.ok(detailBody.bloodGroup);
+              assert.ok(detailBody.patientName);
+              assert.equal(detailBody.status, 'verified');
 
               // Broad list response (GET /api/requests/my) must indicate hasDeliveryAssignment: true without leaking contact phone
               const listRes = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=active`, {

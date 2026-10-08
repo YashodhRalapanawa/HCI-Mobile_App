@@ -714,6 +714,10 @@ requestRouter.get(
 
       if (!bloodRequest.deliveryAssignment) {
         res.status(200).json({
+          requestId: bloodRequest._id.toString(),
+          bloodGroup: bloodRequest.bloodGroup,
+          patientName: bloodRequest.patientName,
+          status: bloodRequest.status,
           deliveryAssignment: null,
           hospitalName: bloodRequest.hospitalName,
           hospitalReferenceAndWard: bloodRequest.hospitalReferenceAndWard,
@@ -723,6 +727,10 @@ requestRouter.get(
       }
 
       res.status(200).json({
+        requestId: bloodRequest._id.toString(),
+        bloodGroup: bloodRequest.bloodGroup,
+        patientName: bloodRequest.patientName,
+        status: bloodRequest.status,
         deliveryAssignment: {
           assignmentId: bloodRequest.deliveryAssignment.assignmentId,
           deliveryPersonName: bloodRequest.deliveryAssignment.deliveryPersonName,

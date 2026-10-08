@@ -219,6 +219,20 @@ export function MyRequestsScreen() {
     }
   }, [isDevPreviewActive, router]);
 
+  const handlePressViewContactFromModal = useCallback(() => {
+    if (isDevPreviewActive) {
+      setDeliveryModalVisible(false);
+      router.push('/requests/preview/delivery' as any);
+      return;
+    }
+
+    if (selectedDeliveryRequest?.id) {
+      const targetId = selectedDeliveryRequest.id;
+      setDeliveryModalVisible(false);
+      router.push(`/requests/${targetId}/delivery` as any);
+    }
+  }, [isDevPreviewActive, router, selectedDeliveryRequest]);
+
   const handlePressEdit = (item: MyRequestSummaryItem) => {
     router.push(`/requests/${item.id}/edit` as any);
   };
@@ -641,6 +655,7 @@ export function MyRequestsScreen() {
             ? () => void handlePressViewDelivery(selectedDeliveryRequest)
             : undefined
         }
+        onPressViewContact={handlePressViewContactFromModal}
       />
 
       {/* Shared Bottom Navigation Bar */}

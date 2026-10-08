@@ -62,6 +62,10 @@ export interface DeliveryAssignmentInfo {
 }
 
 export interface RequestDeliveryAssignmentResponse {
+  requestId?: string;
+  bloodGroup?: BloodGroupType;
+  patientName?: string;
+  status?: RequestStatus;
   deliveryAssignment: DeliveryAssignmentInfo | null;
   hospitalName?: string;
   hospitalReferenceAndWard?: string;
