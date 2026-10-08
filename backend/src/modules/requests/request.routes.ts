@@ -20,6 +20,10 @@ import {
   UPLOAD_DIR,
 } from './upload.middleware.js';
 
+interface RequestWithExistingDoc extends AuthenticatedRequest {
+  existingBloodRequest?: BloodRequestDocument;
+}
+
 export const requestRouter = Router();
 
 function serializeRequest(reqDoc: BloodRequestDocument) {
@@ -371,7 +375,7 @@ requestRouter.patch(
         });
         return;
       }
-      (req as any).existingBloodRequest = existingRequest;
+      (req as RequestWithExistingDoc).existingBloodRequest = existingRequest;
       next();
     } catch (error) {
       console.error('[requests] Error verifying edit eligibility:', error);
@@ -399,7 +403,7 @@ requestRouter.patch(
   },
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const uploadedFile = req.file;
-    const existingRequest = (req as any).existingBloodRequest as BloodRequestDocument;
+    const existingRequest = (req as RequestWithExistingDoc).existingBloodRequest as BloodRequestDocument;
 
     try {
       // 2. Validate replacement file if provided
@@ -496,6 +500,105 @@ requestRouter.patch(
       console.error('[requests] Error updating request:', error);
       res.status(500).json({
         message: 'An error occurred while updating the blood request. Please try again.',
+      });
+    }
+  },
+);
+
+/**
+ * DELETE /api/requests/:id
+ * Deletes a pending blood request owned by the authenticated requester.
+ * Allowed strictly if status is 'pending_verification'.
+ * Rejects deletion safely if dependent operational records (e.g. DonorAcceptance) exist.
+ * Atomically verifies ownership and pending status during database removal.
+ * Cleans up associated verification document from disk upon successful DB removal.
+ */
+requestRouter.delete(
+  '/:id',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      // 1. Valid request ID format
+      if (!mongoose.isValidObjectId(id)) {
+        res.status(400).json({ message: 'Invalid request ID format.' });
+        return;
+      }
+
+      // 2. Fetch existing request for preliminary lifecycle inspection
+      const existingRequest = await BloodRequest.findById(id);
+      if (!existingRequest) {
+        res.status(404).json({ message: 'Blood request not found.' });
+        return;
+      }
+
+      // 3. Ownership check derived exclusively from authenticated user
+      if (existingRequest.requesterId.toString() !== req.user!._id.toString()) {
+        res.status(403).json({ message: 'You do not have permission to delete this request.' });
+        return;
+      }
+
+      // 4. Status check: only pending_verification requests may be deleted
+      if (existingRequest.status !== 'pending_verification') {
+        res.status(409).json({
+          message: 'This request cannot be deleted because it is no longer pending verification.',
+        });
+        return;
+      }
+
+      // 5. Inspect existing dependent operational relationships
+      // If an unexpected acceptance or other dependent record exists, reject deletion safely
+      const dependentAcceptance = await DonorAcceptance.findOne({ requestId: existingRequest._id });
+      if (dependentAcceptance) {
+        console.warn(
+          `[requests] Lifecycle inconsistency: Request ${id} has dependent DonorAcceptance ${dependentAcceptance._id}. Rejecting deletion.`,
+        );
+        res.status(409).json({
+          message: 'This request cannot be deleted because dependent operational donor records exist.',
+        });
+        return;
+      }
+
+      // 6. Atomic database deletion enforcing ownership and pending status
+      const deletedRequest = await BloodRequest.findOneAndDelete({
+        _id: existingRequest._id,
+        requesterId: req.user!._id,
+        status: 'pending_verification',
+      });
+
+      if (!deletedRequest) {
+        res.status(409).json({
+          message: 'This request cannot be deleted because it has already been processed by the hospital or changed status.',
+        });
+        return;
+      }
+
+      // 7. Associated document cleanup strictly within UPLOAD_DIR
+      const storageKey = deletedRequest.document?.storageKey;
+      if (storageKey) {
+        try {
+          const safeFilename = path.basename(storageKey);
+          const resolvedPath = path.resolve(UPLOAD_DIR, safeFilename);
+          if (resolvedPath.startsWith(UPLOAD_DIR)) {
+            removeUploadedFile(resolvedPath);
+          } else {
+            console.warn(`[requests] Storage path traversal rejected for file cleanup: ${storageKey}`);
+          }
+        } catch (cleanupErr) {
+          // If file cleanup fails after DB deletion, log failure safely; do not misreport that request exists
+          console.warn('[requests] Warning: could not delete document file for deleted request:', cleanupErr);
+        }
+      }
+
+      res.status(200).json({
+        message: 'Blood request deleted successfully.',
+        id: deletedRequest._id.toString(),
+      });
+    } catch (error) {
+      console.error('[requests] Error deleting blood request:', error);
+      res.status(500).json({
+        message: 'An error occurred while deleting the blood request. Please try again.',
       });
     }
   },

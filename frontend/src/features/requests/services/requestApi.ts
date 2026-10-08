@@ -167,4 +167,19 @@ export const requestApi = {
       },
     );
   },
+
+  deleteRequest: async (
+    token: string,
+    id: string,
+  ): Promise<{ message: string; id: string }> => {
+    return apiRequest<{ message: string; id: string }>(
+      `requests/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+  },
 };

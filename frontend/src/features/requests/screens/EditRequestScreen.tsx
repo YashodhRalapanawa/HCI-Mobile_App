@@ -348,7 +348,7 @@ export function EditRequestScreen() {
           </Text>
 
           <View style={styles.errorActionsRow}>
-            {id ? (
+            {id && loadError !== 'Blood request not found.' ? (
               <TouchableOpacity
                 style={styles.secondaryActionBtn}
                 onPress={() =>

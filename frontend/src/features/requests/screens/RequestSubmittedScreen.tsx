@@ -206,6 +206,8 @@ export function RequestSubmittedScreen() {
                   ? 'Access Restricted'
                   : errorType === 'preview_guidance'
                   ? 'No Request Submitted'
+                  : errorType === 'not_found'
+                  ? 'Request Not Found'
                   : 'Unable to Load Request'}
               </Text>
               <Text style={styles.errorCardBody}>{errorMessage}</Text>
@@ -232,6 +234,15 @@ export function RequestSubmittedScreen() {
                 >
                   <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
                   <Text style={styles.errorPrimaryBtnText}>Create New Blood Request</Text>
+                </TouchableOpacity>
+              ) : errorType === 'not_found' ? (
+                <TouchableOpacity
+                  style={styles.errorPrimaryBtn}
+                  onPress={() => router.replace('/requests/my')}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
+                  <Text style={styles.errorPrimaryBtnText}>Back to My Requests</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity

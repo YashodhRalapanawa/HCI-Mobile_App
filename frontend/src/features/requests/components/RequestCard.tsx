@@ -13,6 +13,8 @@ interface RequestCardProps {
   item: MyRequestSummaryItem;
   onPressDetails: (item: MyRequestSummaryItem) => void;
   onPressEdit?: (item: MyRequestSummaryItem) => void;
+  onPressDelete?: (item: MyRequestSummaryItem) => void;
+  isDeleting?: boolean;
 }
 
 interface StatusVisualConfig {
@@ -81,7 +83,13 @@ function getStatusConfig(status: RequestStatus): StatusVisualConfig {
   }
 }
 
-export function RequestCard({ item, onPressDetails, onPressEdit }: RequestCardProps) {
+export function RequestCard({
+  item,
+  onPressDetails,
+  onPressEdit,
+  onPressDelete,
+  isDeleting = false,
+}: RequestCardProps) {
   const [copied, setCopied] = useState(false);
   const statusConfig = getStatusConfig(item.status);
   const isPending = item.status === 'pending_verification';
@@ -177,28 +185,48 @@ export function RequestCard({ item, onPressDetails, onPressEdit }: RequestCardPr
         <Text style={styles.supportingText}>{statusConfig.supportingText}</Text>
       </View>
 
-      {/* Action Buttons: Pending requests have both Edit and Details */}
-      {isPending && onPressEdit ? (
-        <View style={styles.actionRowWithBoth}>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => onPressEdit(item)}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={`Edit request ${item.id}`}
-          >
-            <Ionicons name="pencil" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
-            <Text style={styles.editBtnText}>Edit</Text>
-          </TouchableOpacity>
+      {/* Action Buttons: Pending requests have Edit, Delete, and Details */}
+      {isPending ? (
+        <View style={styles.actionRowWithPending}>
+          <View style={styles.leftActions}>
+            {onPressEdit ? (
+              <TouchableOpacity
+                style={[styles.editBtn, isDeleting && styles.disabledBtn]}
+                onPress={() => onPressEdit(item)}
+                disabled={isDeleting}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit request ${item.id}`}
+              >
+                <Ionicons name="pencil" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                <Text style={styles.editBtnText}>Edit</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {onPressDelete ? (
+              <TouchableOpacity
+                style={[styles.deleteBtn, isDeleting && styles.disabledBtn]}
+                onPress={() => onPressDelete(item)}
+                disabled={isDeleting}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete request ${item.id}`}
+              >
+                <Ionicons name="trash-outline" size={13} color="#DC2626" style={{ marginRight: 5 }} />
+                <Text style={styles.deleteBtnText}>{isDeleting ? 'Deleting...' : 'Delete'}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
           <TouchableOpacity
-            style={styles.actionBtn}
+            style={[styles.actionBtn, isDeleting && styles.disabledBtn]}
             onPress={() => onPressDetails(item)}
+            disabled={isDeleting}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={`${statusConfig.actionText} for request ${item.id}`}
           >
-            <Text style={styles.actionBtnText}>{statusConfig.actionText}</Text>
+            <Text style={styles.actionBtnText}>Details</Text>
             <Ionicons name="chevron-forward" size={15} color={colors.primary} />
           </TouchableOpacity>
         </View>
@@ -371,12 +399,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 4,
   },
+  actionRowWithPending: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingTop: 4,
+  },
+  leftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#2563EB',
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     borderRadius: borderRadius.sm,
     shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 1 },
@@ -389,5 +431,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.2,
+  },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: borderRadius.sm,
+  },
+  deleteBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
+    letterSpacing: 0.2,
+  },
+  disabledBtn: {
+    opacity: 0.45,
   },
 });

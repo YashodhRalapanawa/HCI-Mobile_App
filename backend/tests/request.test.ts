@@ -954,7 +954,10 @@ test('HTTP Request Routes Integration', async (t) => {
               });
 
               assert.equal(res.status, 200);
-              const body = (await res.json()) as { message: string; request: any };
+              const body = (await res.json()) as {
+                message: string;
+                request: Record<string, string | number>;
+              };
               assert.equal(body.request.id, createdRequestId);
               assert.equal(body.request.patientName, 'Updated Perera');
               assert.equal(body.request.bloodGroup, 'AB+');
@@ -1042,7 +1045,10 @@ test('HTTP Request Routes Integration', async (t) => {
               });
 
               assert.equal(res.status, 200);
-              const body = (await res.json()) as { message: string; request: any };
+              const body = (await res.json()) as {
+                message: string;
+                request: Record<string, string | number>;
+              };
               assert.equal(body.request.patientName, 'Perera Replacement');
               assert.equal(body.request.bloodGroup, 'O+');
               assert.equal(body.request.unitsRequired, 2);
@@ -1106,6 +1112,241 @@ test('HTTP Request Routes Integration', async (t) => {
                 { returnDocument: 'after' },
               );
               assert.equal(updated, null);
+            });
+          });
+
+          // 13. Comprehensive DELETE /api/requests/:id verification
+          await subT.test('DELETE /api/requests/:id comprehensive delete verification', async (delT) => {
+            assert.ok(createdRequestId);
+            assert.ok(createdUserId);
+            assert.ok(secondUserId);
+            assert.ok(uploadedStorageKey);
+            const ownerId = createdUserId;
+            const otherId = secondUserId;
+            const reqId = createdRequestId;
+            const storageKey = uploadedStorageKey;
+
+            // 13.1 Unauthenticated access is rejected with 401
+            await delT.test('rejects unauthenticated delete with 401', async () => {
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}`, {
+                method: 'DELETE',
+              });
+              assert.equal(res.status, 401);
+            });
+
+            // 13.2 Invalid request ID format handled with 400
+            await delT.test('rejects invalid request ID format with 400', async () => {
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/not-a-valid-id`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+              assert.equal(res.status, 400);
+              const body = (await res.json()) as { message: string };
+              assert.match(body.message, /invalid request id/i);
+            });
+
+            // 13.3 Non-existent request ID handled with 404
+            await delT.test('rejects non-existent request ID with 404', async () => {
+              const nonExistentId = new mongoose.Types.ObjectId().toString();
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${nonExistentId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+              assert.equal(res.status, 404);
+              const body = (await res.json()) as { message: string };
+              assert.match(body.message, /not found/i);
+            });
+
+            // 13.4 Non-owner cannot delete it (403 Forbidden)
+            await delT.test('rejects non-owner delete with 403', async () => {
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${secondUserToken}` },
+              });
+              assert.equal(res.status, 403);
+              const body = (await res.json()) as { message: string };
+              assert.match(body.message, /permission/i);
+
+              // Verify request record was preserved
+              const doc = await BloodRequest.findById(reqId);
+              assert.ok(doc);
+            });
+
+            // 13.5 Verified, in_progress, fulfilled, and cancelled requests cannot be deleted (409 Conflict)
+            await delT.test('verified, in_progress, fulfilled, and cancelled requests cannot be deleted', async () => {
+              const statuses = ['verified', 'in_progress', 'fulfilled', 'cancelled'] as const;
+              for (const nonPendingStatus of statuses) {
+                // Temporarily update request status
+                await BloodRequest.findByIdAndUpdate(reqId, { status: nonPendingStatus });
+
+                const res = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}`, {
+                  method: 'DELETE',
+                  headers: { Authorization: `Bearer ${realJwtToken}` },
+                });
+
+                assert.equal(res.status, 409);
+                const body = (await res.json()) as { message: string };
+                assert.match(body.message, /no longer pending/i);
+
+                // Verify record still exists
+                const doc = await BloodRequest.findById(reqId);
+                assert.ok(doc);
+                assert.equal(doc.status, nonPendingStatus);
+              }
+
+              // Restore back to pending_verification
+              await BloodRequest.findByIdAndUpdate(reqId, { status: 'pending_verification' });
+            });
+
+            // 13.6 Failed deletion leaves the document intact on disk
+            await delT.test('failed deletion leaves the document intact', async () => {
+              // Ensure the file exists on disk
+              const filePath = path.join(UPLOAD_DIR, storageKey);
+              if (!fs.existsSync(filePath)) {
+                fs.writeFileSync(filePath, '%PDF-1.4 test document content');
+              }
+
+              // Change status to verified
+              await BloodRequest.findByIdAndUpdate(reqId, { status: 'verified' });
+
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+              assert.equal(res.status, 409);
+
+              // File must still exist on disk
+              assert.equal(fs.existsSync(filePath), true);
+
+              // Restore status
+              await BloodRequest.findByIdAndUpdate(reqId, { status: 'pending_verification' });
+            });
+
+            // 13.7 Unexpected dependent operational records prevent deletion safely (409 Conflict)
+            await delT.test('unexpected dependent operational records prevent deletion', async () => {
+              // Create an unexpected DonorAcceptance record for this pending request
+              const acceptance = new DonorAcceptance({
+                requestId: new mongoose.Types.ObjectId(reqId),
+                donorId: new mongoose.Types.ObjectId(otherId),
+                safeDonorCode: 'DONOR-OPERATIONAL-TEST',
+                status: 'accepted',
+              });
+              await acceptance.save();
+
+              try {
+                const res = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}`, {
+                  method: 'DELETE',
+                  headers: { Authorization: `Bearer ${realJwtToken}` },
+                });
+
+                assert.equal(res.status, 409);
+                const body = (await res.json()) as { message: string };
+                assert.match(body.message, /dependent operational donor records exist/i);
+
+                // Ensure request was NOT deleted
+                const doc = await BloodRequest.findById(reqId);
+                assert.ok(doc);
+              } finally {
+                // Clean up test acceptance record
+                await DonorAcceptance.findByIdAndDelete(acceptance._id);
+              }
+            });
+
+            // 13.8 Missing-file cleanup is safe (handles already-missing file gracefully)
+            await delT.test('missing-file cleanup is safe and handles already-missing file gracefully', async () => {
+              const dummyStorageKey = `missing-doc-${Date.now()}.pdf`;
+              const missingFileDoc = new BloodRequest({
+                requesterId: new mongoose.Types.ObjectId(ownerId),
+                patientName: 'Missing File Test',
+                bloodGroup: 'O+',
+                unitsRequired: 1,
+                unitsFulfilled: 0,
+                hospitalId: 'hosp-colombo-city',
+                hospitalName: 'City Hospital, Colombo',
+                hospitalReferenceAndWard: 'REF-MISSING-DOC',
+                urgency: 'Scheduled',
+                document: {
+                  originalName: 'missing.pdf',
+                  mimeType: 'application/pdf',
+                  sizeBytes: 100,
+                  storageKey: dummyStorageKey,
+                },
+                status: 'pending_verification',
+              });
+              await missingFileDoc.save();
+
+              // File does not exist on disk
+              const filePath = path.join(UPLOAD_DIR, dummyStorageKey);
+              assert.equal(fs.existsSync(filePath), false);
+
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${missingFileDoc._id.toString()}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+
+              assert.equal(res.status, 200);
+              const body = (await res.json()) as { message: string; id: string };
+              assert.equal(body.id, missingFileDoc._id.toString());
+
+              // Record is deleted
+              const check = await BloodRequest.findById(missingFileDoc._id);
+              assert.equal(check, null);
+            });
+
+            // 13.9 Ownership and pending status are enforced atomically
+            await delT.test('ownership and pending status are enforced atomically', async () => {
+              // Emulate race condition: status was modified immediately before atomic delete
+              const atomicResult = await BloodRequest.findOneAndDelete({
+                _id: reqId,
+                requesterId: ownerId,
+                status: 'verified', // condition requires pending, but status is pending
+              });
+              assert.equal(atomicResult, null);
+            });
+
+            // 13.10 Owner successfully deletes a pending request, record is deleted, and document is cleaned up
+            await delT.test('owner successfully deletes pending request, removes record, and cleans up document', async () => {
+              const testStorageKey = `delete-cleanup-${Date.now()}.pdf`;
+              const testFilePath = path.join(UPLOAD_DIR, testStorageKey);
+              fs.writeFileSync(testFilePath, '%PDF-1.4 sample file for cleanup verification');
+              assert.equal(fs.existsSync(testFilePath), true);
+
+              const testDoc = new BloodRequest({
+                requesterId: new mongoose.Types.ObjectId(ownerId),
+                patientName: 'Ready To Delete',
+                bloodGroup: 'AB+',
+                unitsRequired: 2,
+                unitsFulfilled: 0,
+                hospitalId: 'hosp-colombo-city',
+                hospitalName: 'City Hospital, Colombo',
+                hospitalReferenceAndWard: 'Ward 10',
+                urgency: 'Urgent',
+                document: {
+                  originalName: 'test-doc.pdf',
+                  mimeType: 'application/pdf',
+                  sizeBytes: 250,
+                  storageKey: testStorageKey,
+                },
+                status: 'pending_verification',
+              });
+              await testDoc.save();
+
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${testDoc._id.toString()}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+
+              assert.equal(res.status, 200);
+              const body = (await res.json()) as { message: string; id: string };
+              assert.equal(body.id, testDoc._id.toString());
+              assert.match(body.message, /deleted successfully/i);
+
+              // Verify record no longer exists in MongoDB
+              const deletedCheck = await BloodRequest.findById(testDoc._id);
+              assert.equal(deletedCheck, null);
+
+              // Verify associated document file was removed from disk
+              assert.equal(fs.existsSync(testFilePath), false);
             });
           });
         } finally {

@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +36,10 @@ export function MyRequestsScreen() {
   const [errorType, setErrorType] = useState<'unauthenticated' | 'network' | null>(null);
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
+  const [requestToDelete, setRequestToDelete] = useState<MyRequestSummaryItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Sequence ref to prevent race conditions from rapid tab switching
   const requestSeqRef = useRef(0);
@@ -168,6 +174,84 @@ export function MyRequestsScreen() {
     router.push(`/requests/${item.id}/edit` as any);
   };
 
+  const handlePressDelete = (item: MyRequestSummaryItem) => {
+    if (isDeleting) return;
+    setDeleteError(null);
+    setRequestToDelete(item);
+  };
+
+  const handleCancelDelete = () => {
+    if (isDeleting) return;
+    setRequestToDelete(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!requestToDelete || !token || isDeleting) return;
+
+    const target = requestToDelete;
+    setIsDeleting(true);
+    setDeletingId(target.id);
+    setDeleteError(null);
+
+    try {
+      await requestApi.deleteRequest(token, target.id);
+
+      // 1. If latest_submitted_request_id points to the deleted request, clear that reference
+      try {
+        const storedLatestId = await AsyncStorage.getItem('latest_submitted_request_id');
+        if (storedLatestId === target.id) {
+          await AsyncStorage.removeItem('latest_submitted_request_id');
+        }
+      } catch {
+        // storage cleanup failure is non-fatal
+      }
+
+      // 2. Close confirmation modal
+      setRequestToDelete(null);
+
+      // 3. Immediately remove from local list for snappy UX
+      setRequests((prev) => prev.filter((r) => r.id !== target.id));
+      if (activeTab === 'active') {
+        setCounts((prev) => ({
+          ...prev,
+          active: Math.max(0, prev.active - 1),
+        }));
+      }
+
+      // 4. Refresh authoritative Active/Completed counts and pagination from server
+      await fetchRequests(activeTab, 1, false, false);
+    } catch (err: any) {
+      const status = err?.status;
+      const msg = err?.message || 'Failed to delete blood request.';
+
+      setRequestToDelete(null);
+
+      if (
+        status === 401 ||
+        msg.includes('401') ||
+        msg.toLowerCase().includes('session') ||
+        msg.toLowerCase().includes('token')
+      ) {
+        setErrorType('unauthenticated');
+        setErrorMessage('Your session has expired. Please sign in to manage your requests.');
+      } else if (
+        status === 409 ||
+        msg.toLowerCase().includes('conflict') ||
+        msg.toLowerCase().includes('processed') ||
+        msg.toLowerCase().includes('no longer')
+      ) {
+        // Status conflict: show clear error and refresh list so Edit/Delete availability reflects server state
+        setDeleteError(msg);
+        await fetchRequests(activeTab, 1, false, false);
+      } else {
+        setDeleteError(msg);
+      }
+    } finally {
+      setIsDeleting(false);
+      setDeletingId(null);
+    }
+  };
+
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       {/* Top Bar: Back Action, Title, Dev Screen Switcher */}
@@ -196,6 +280,23 @@ export function MyRequestsScreen() {
       <Text style={styles.headerSubtitle}>
         Track your blood requests, hospital verification status, and donor responses.
       </Text>
+
+      {/* Visible Deletion Error Alert */}
+      {deleteError && (
+        <View style={styles.deleteErrorAlert} accessible={true} accessibilityRole="alert">
+          <View style={styles.deleteErrorContent}>
+            <Ionicons name="alert-circle" size={18} color="#DC2626" style={{ marginRight: 8, marginTop: 1 }} />
+            <Text style={styles.deleteErrorText}>{deleteError}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setDeleteError(null)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Dismiss error"
+          >
+            <Ionicons name="close" size={18} color="#DC2626" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Active and Completed Tabs */}
       <View style={styles.tabContainer} accessibilityRole="tablist">
@@ -352,6 +453,8 @@ export function MyRequestsScreen() {
             item={item}
             onPressDetails={handlePressDetails}
             onPressEdit={handlePressEdit}
+            onPressDelete={handlePressDelete}
+            isDeleting={isDeleting && deletingId === item.id}
           />
         )}
         ListHeaderComponent={renderHeader}
@@ -391,6 +494,62 @@ export function MyRequestsScreen() {
           <Text style={styles.newRequestBtnText}>NEW REQUEST</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Accessible Cross-Platform Delete Confirmation Dialog */}
+      <Modal
+        visible={Boolean(requestToDelete)}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelDelete}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard} accessible={true} accessibilityViewIsModal={true}>
+            <View style={styles.modalHeaderIcon}>
+              <Ionicons name="trash-outline" size={28} color="#DC2626" />
+            </View>
+            <Text style={styles.modalTitle}>Delete blood request?</Text>
+            <Text style={styles.modalBody}>
+              This blood request for {requestToDelete?.bloodGroup} ({requestToDelete?.unitsRequired}{' '}
+              {requestToDelete?.unitsRequired === 1 ? 'unit' : 'units'}) at{' '}
+              {requestToDelete?.hospitalName} will be permanently removed. This action cannot be undone.
+            </Text>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={handleCancelDelete}
+                disabled={isDeleting}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel deletion"
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalDeleteBtn, isDeleting && styles.modalDeleteBtnDisabled]}
+                onPress={handleConfirmDelete}
+                disabled={isDeleting}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Delete request"
+              >
+                {isDeleting ? (
+                  <>
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalDeleteBtnText}>Deleting...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="trash" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalDeleteBtnText}>Delete request</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Shared Bottom Navigation Bar */}
       <BottomNavBar activeTab="home" />
@@ -612,5 +771,113 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeaderIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalBody: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  modalDeleteBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#DC2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  modalDeleteBtnDisabled: {
+    opacity: 0.65,
+  },
+  modalDeleteBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  deleteErrorAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: spacing.md,
+  },
+  deleteErrorContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+    marginRight: 8,
+  },
+  deleteErrorText: {
+    fontSize: 13,
+    color: '#B91C1C',
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 18,
   },
 });
