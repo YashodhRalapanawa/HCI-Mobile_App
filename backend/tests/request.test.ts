@@ -10,6 +10,7 @@ import { createApp } from '../src/app.js';
 import { env } from '../src/config/env.js';
 import { User } from '../src/modules/users/user.model.js';
 import { BloodRequest } from '../src/modules/requests/request.model.js';
+import { DonorAcceptance } from '../src/modules/requests/donorAcceptance.model.js';
 import { createBloodRequestSchema } from '../src/modules/requests/request.validation.js';
 import {
   validateFileSignature,
@@ -216,6 +217,13 @@ test('HTTP Request Routes Integration', async (t) => {
 
   await t.test('GET /api/requests/my without authorization returns 401', async () => {
     const res = await fetch(`http://127.0.0.1:${port}/api/requests/my`);
+    assert.equal(res.status, 401);
+    const body = (await res.json()) as { message: string };
+    assert.match(body.message, /authentication required/i);
+  });
+
+  await t.test('GET /api/requests/:id/acceptances without authorization returns 401', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/requests/507f1f77bcf86cd799439011/acceptances`);
     assert.equal(res.status, 401);
     const body = (await res.json()) as { message: string };
     assert.match(body.message, /authentication required/i);
@@ -684,6 +692,142 @@ test('HTTP Request Routes Integration', async (t) => {
             assert.equal(u2Data.requests[0]?.id, user2Doc._id.toString());
             assert.equal(u2Data.counts.active, 1);
             assert.equal(u2Data.counts.completed, 0);
+          });
+
+          // E. Member 2.4: Donor Acceptance Endpoints, Security, Isolation & Immutability
+          await subT.test('GET /api/requests/:id/acceptances validates input, non-existent, and ownership', async () => {
+            // Invalid ID
+            const invRes = await fetch(`http://127.0.0.1:${port}/api/requests/invalid-mongo-id/acceptances`, {
+              headers: { Authorization: `Bearer ${realJwtToken}` },
+            });
+            assert.equal(invRes.status, 400);
+
+            // Non-existent ID
+            const randomId = new mongoose.Types.ObjectId().toString();
+            const notFoundRes = await fetch(`http://127.0.0.1:${port}/api/requests/${randomId}/acceptances`, {
+              headers: { Authorization: `Bearer ${realJwtToken}` },
+            });
+            assert.equal(notFoundRes.status, 404);
+
+            // Ownership isolation: User 2 cannot access User 1's acceptances
+            const forbidRes = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}/acceptances`, {
+              headers: { Authorization: `Bearer ${secondUserToken}` },
+            });
+            assert.equal(forbidRes.status, 403);
+
+            // Owner with 0 acceptances returns empty array and count 0
+            const emptyRes = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}/acceptances`, {
+              headers: { Authorization: `Bearer ${realJwtToken}` },
+            });
+            assert.equal(emptyRes.status, 200);
+            const emptyData = (await emptyRes.json()) as {
+              acceptances: unknown[];
+              count: number;
+              request: { bloodGroup: string; hospitalName: string };
+            };
+            assert.equal(emptyData.count, 0);
+            assert.equal(emptyData.acceptances.length, 0);
+            assert.equal(emptyData.request.bloodGroup, 'B-');
+          });
+
+          await subT.test('GET /api/requests/:id/acceptances returns safe fields, handles multiple donors, excludes withdrawn, and preserves request status', async () => {
+            const donor1Id = new mongoose.Types.ObjectId();
+            const donor2Id = new mongoose.Types.ObjectId();
+            const withdrawnDonorId = new mongoose.Types.ObjectId();
+
+            const preDoc = await BloodRequest.findById(createdRequestId);
+            assert.ok(preDoc);
+            const preStatus = preDoc.status;
+            const preFulfilled = preDoc.unitsFulfilled;
+
+            try {
+              // Create 2 active acceptances and 1 withdrawn acceptance
+              await DonorAcceptance.create({
+                requestId: preDoc._id,
+                donorId: donor1Id,
+                safeDonorCode: 'Donor D-017',
+                status: 'accepted',
+              });
+
+              await DonorAcceptance.create({
+                requestId: preDoc._id,
+                donorId: donor2Id,
+                safeDonorCode: 'Donor D-022',
+                status: 'accepted',
+              });
+
+              await DonorAcceptance.create({
+                requestId: preDoc._id,
+                donorId: withdrawnDonorId,
+                safeDonorCode: 'Donor D-099',
+                status: 'withdrawn',
+              });
+
+              // Retrieve acceptances
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}/acceptances`, {
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+              assert.equal(res.status, 200);
+              const data = (await res.json()) as {
+                acceptances: Array<{
+                  id: string;
+                  safeDonorCode: string;
+                  status: string;
+                  acceptedAt: string;
+                  donorId?: string;
+                  email?: string;
+                  phone?: string;
+                }>;
+                count: number;
+                request: {
+                  id: string;
+                  patientName: string;
+                  bloodGroup: string;
+                  hospitalName: string;
+                  status: string;
+                };
+              };
+
+              // Verify only active acceptances returned (withdrawn excluded)
+              assert.equal(data.count, 2);
+              assert.equal(data.acceptances.length, 2);
+              assert.equal(data.acceptances[0]?.safeDonorCode, 'Donor D-017');
+              assert.equal(data.acceptances[1]?.safeDonorCode, 'Donor D-022');
+              assert.equal(data.request.hospitalName, 'City Hospital, Colombo');
+              assert.equal(data.request.bloodGroup, 'B-');
+
+              // Verify strict data privacy: safe fields only, no private donor data exposed
+              for (const acc of data.acceptances) {
+                const record = acc as Record<string, unknown>;
+                assert.equal(acc.status, 'accepted');
+                assert.ok(acc.acceptedAt);
+                assert.equal(record.donorId, undefined);
+                assert.equal(record.email, undefined);
+                assert.equal(record.phone, undefined);
+                assert.equal(record.password, undefined);
+                assert.equal(record.storageKey, undefined);
+              }
+
+              // Verify GET /api/requests/my aggregates acceptedDonorsCount efficiently
+              const listRes = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=active`, {
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+              assert.equal(listRes.status, 200);
+              const listData = (await listRes.json()) as {
+                requests: Array<{ id: string; acceptedDonorsCount: number }>;
+              };
+              const targetCard = listData.requests.find((r) => r.id === createdRequestId);
+              assert.ok(targetCard);
+              assert.equal(targetCard.acceptedDonorsCount, 2);
+
+              // Verify strictly read-only: blood request was NOT mutated
+              const postDoc = await BloodRequest.findById(createdRequestId);
+              assert.ok(postDoc);
+              assert.equal(postDoc.status, preStatus);
+              assert.equal(postDoc.unitsFulfilled, preFulfilled);
+            } finally {
+              await DonorAcceptance.deleteMany({ requestId: preDoc._id });
+            }
           });
         } finally {
           for (const reqId of extraReqIds) {

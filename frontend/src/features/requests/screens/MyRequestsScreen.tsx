@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '@/theme';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -18,10 +18,12 @@ import { BottomNavBar } from '@/components/BottomNavBar';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { requestApi } from '../services/requestApi';
 import { RequestCard } from '../components/RequestCard';
-import type { MyRequestSummaryItem, MyRequestsTab } from '../types';
+import { DonorAcceptedModal } from '../components/DonorAcceptedModal';
+import type { DonorAcceptanceSummary, MyRequestSummaryItem, MyRequestsTab } from '../types';
 
 export function MyRequestsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ preview?: string }>();
   const { token } = useAuth();
 
   const [activeTab, setActiveTab] = useState<MyRequestsTab>('active');
@@ -34,6 +36,18 @@ export function MyRequestsScreen() {
   const [errorType, setErrorType] = useState<'unauthenticated' | 'network' | null>(null);
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
+
+  // Member 2.4: Donor Accepted Modal states
+  const [donorModalVisible, setDonorModalVisible] = useState(false);
+  const [selectedRequestForModal, setSelectedRequestForModal] = useState<MyRequestSummaryItem | null>(null);
+  const [modalAcceptances, setModalAcceptances] = useState<DonorAcceptanceSummary[]>([]);
+  const [loadingAcceptances, setLoadingAcceptances] = useState(false);
+  const [acceptanceErrorMessage, setAcceptanceErrorMessage] = useState<string | null>(null);
+
+  // Derive preview mode directly from route parameters
+  const isDevPreviewRequested = params.preview === '2.4' || params.preview === 'member2.4';
+  const isDonorModalOpen = donorModalVisible || isDevPreviewRequested;
+  const isDevPreviewModal = isDevPreviewRequested && !selectedRequestForModal;
 
   // Sequence ref to prevent race conditions from rapid tab switching
   const requestSeqRef = useRef(0);
@@ -164,6 +178,42 @@ export function MyRequestsScreen() {
     router.push('/requests/new');
   };
 
+  const handlePressViewDonor = async (item: MyRequestSummaryItem) => {
+    setSelectedRequestForModal(item);
+    setDonorModalVisible(true);
+    setModalAcceptances([]);
+    setAcceptanceErrorMessage(null);
+
+    if (!token) {
+      setAcceptanceErrorMessage('Please sign in to view donor acceptance details.');
+      return;
+    }
+
+    setLoadingAcceptances(true);
+    try {
+      const res = await requestApi.getRequestAcceptances(token, item.id);
+      setModalAcceptances(res.acceptances);
+      // Revalidation: if acceptance was withdrawn or count became 0, refresh list
+      if (res.acceptances.length === 0) {
+        void fetchRequests(activeTab, page, false, false);
+      }
+    } catch (err: any) {
+      setAcceptanceErrorMessage(err?.message || 'Unable to load donor acceptance details.');
+    } finally {
+      setLoadingAcceptances(false);
+    }
+  };
+
+  const handleCloseDonorModal = () => {
+    setDonorModalVisible(false);
+    setSelectedRequestForModal(null);
+    setModalAcceptances([]);
+    setAcceptanceErrorMessage(null);
+    if (params.preview) {
+      router.replace('/requests/my');
+    }
+  };
+
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       {/* Top Bar: Back Action, Title, Dev Screen Switcher */}
@@ -183,7 +233,7 @@ export function MyRequestsScreen() {
 
         {__DEV__ && (
           <View style={styles.devSwitcherWrapper}>
-            <ScreenSwitcher currentScreenId={21} />
+            <ScreenSwitcher currentScreenId={isDonorModalOpen && isDevPreviewModal ? 22 : 21} />
           </View>
         )}
       </View>
@@ -344,7 +394,11 @@ export function MyRequestsScreen() {
         data={requests}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <RequestCard item={item} onPressDetails={handlePressDetails} />
+          <RequestCard
+            item={item}
+            onPressDetails={handlePressDetails}
+            onPressViewDonor={handlePressViewDonor}
+          />
         )}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={
@@ -386,6 +440,26 @@ export function MyRequestsScreen() {
 
       {/* Shared Bottom Navigation Bar */}
       <BottomNavBar activeTab="home" />
+
+      {/* Member 2.4: A donor accepted! Modal */}
+      <DonorAcceptedModal
+        visible={isDonorModalOpen}
+        onClose={handleCloseDonorModal}
+        requestId={selectedRequestForModal?.id}
+        patientName={selectedRequestForModal?.patientName}
+        bloodGroup={selectedRequestForModal?.bloodGroup}
+        hospitalName={selectedRequestForModal?.hospitalName}
+        hospitalReferenceAndWard={selectedRequestForModal?.hospitalReferenceAndWard}
+        acceptances={modalAcceptances}
+        loading={loadingAcceptances}
+        errorMessage={acceptanceErrorMessage}
+        onRetry={() => {
+          if (selectedRequestForModal) {
+            void handlePressViewDonor(selectedRequestForModal);
+          }
+        }}
+        isDevPreview={isDevPreviewModal}
+      />
     </SafeAreaView>
   );
 }

@@ -5,6 +5,7 @@ import type {
   CreateRequestFormValues,
   MyRequestsTab,
   MyRequestsResponse,
+  RequestAcceptancesResponse,
 } from '../types';
 
 export const requestApi = {
@@ -91,5 +92,20 @@ export const requestApi = {
         Authorization: `Bearer ${token}`,
       },
     });
+  },
+
+  getRequestAcceptances: async (
+    token: string,
+    requestId: string,
+  ): Promise<RequestAcceptancesResponse> => {
+    return apiRequest<RequestAcceptancesResponse>(
+      `requests/${encodeURIComponent(requestId)}/acceptances`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
   },
 };

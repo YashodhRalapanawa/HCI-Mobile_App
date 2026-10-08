@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { authenticate, type AuthenticatedRequest } from '../../middleware/auth.js';
 import { SAMPLE_HOSPITALS, getHospitalById } from './hospital.data.js';
 import { BloodRequest, type BloodRequestDocument, type RequestStatus } from './request.model.js';
+import { DonorAcceptance } from './donorAcceptance.model.js';
 import { createBloodRequestSchema } from './request.validation.js';
 import {
   documentUpload,
@@ -154,7 +155,7 @@ requestRouter.post(
   },
 );
 
-function serializeRequestSummary(reqDoc: BloodRequestDocument) {
+function serializeRequestSummary(reqDoc: BloodRequestDocument, acceptedDonorsCount: number = 0) {
   return {
     id: reqDoc._id.toString(),
     patientName: reqDoc.patientName,
@@ -166,6 +167,7 @@ function serializeRequestSummary(reqDoc: BloodRequestDocument) {
     hospitalReferenceAndWard: reqDoc.hospitalReferenceAndWard,
     urgency: reqDoc.urgency,
     status: reqDoc.status,
+    acceptedDonorsCount,
     createdAt: reqDoc.createdAt.toISOString(),
   };
 }
@@ -252,8 +254,23 @@ requestRouter.get(
         .skip(skip)
         .limit(limit);
 
+      const requestIds = items.map((item) => item._id);
+      const acceptanceCounts = await DonorAcceptance.aggregate<{ _id: mongoose.Types.ObjectId; count: number }>([
+        { $match: { requestId: { $in: requestIds }, status: 'accepted' } },
+        { $group: { _id: '$requestId', count: { $sum: 1 } } },
+      ]);
+      const countMap = new Map<string, number>();
+      for (const entry of acceptanceCounts) {
+        countMap.set(entry._id.toString(), entry.count);
+      }
+
       res.status(200).json({
-        requests: items.map((item) => serializeRequestSummary(item as unknown as BloodRequestDocument)),
+        requests: items.map((item) =>
+          serializeRequestSummary(
+            item as unknown as BloodRequestDocument,
+            countMap.get(item._id.toString()) || 0,
+          ),
+        ),
         pagination: {
           page,
           limit,
@@ -310,6 +327,72 @@ requestRouter.get(
     } catch (error) {
       console.error('[requests] Error fetching request by ID:', error);
       res.status(500).json({ message: 'An error occurred while fetching the blood request.' });
+    }
+  },
+);
+
+/**
+ * GET /api/requests/:id/acceptances
+ * Retrieves owner-protected donor acceptance summaries for a blood request.
+ * Authenticated via JWT. Validates ownership (req.user._id === bloodRequest.requesterId).
+ * Returns only safe fields for Member 2.4 modal: safeDonorCode, status, acceptedAt.
+ * Never exposes donor credentials, contact info, coordinates, or internal storage keys.
+ * Strictly read-only: does not modify request status, unitsFulfilled, or donor records.
+ */
+requestRouter.get(
+  '/:id/acceptances',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.isValidObjectId(id)) {
+        res.status(400).json({ message: 'Invalid request ID format.' });
+        return;
+      }
+
+      const bloodRequest = await BloodRequest.findById(id);
+      if (!bloodRequest) {
+        res.status(404).json({ message: 'Blood request not found.' });
+        return;
+      }
+
+      // Enforce owner-only access: only the original requester can view acceptances
+      if (bloodRequest.requesterId.toString() !== req.user!._id.toString()) {
+        res.status(403).json({ message: 'You do not have permission to view acceptances for this request.' });
+        return;
+      }
+
+      const acceptances = await DonorAcceptance.find({
+        requestId: bloodRequest._id,
+        status: 'accepted',
+      }).sort({ createdAt: 1 });
+
+      res.status(200).json({
+        request: {
+          id: bloodRequest._id.toString(),
+          patientName: bloodRequest.patientName,
+          bloodGroup: bloodRequest.bloodGroup,
+          unitsRequired: bloodRequest.unitsRequired,
+          unitsFulfilled: bloodRequest.unitsFulfilled,
+          hospitalId: bloodRequest.hospitalId,
+          hospitalName: bloodRequest.hospitalName,
+          hospitalReferenceAndWard: bloodRequest.hospitalReferenceAndWard,
+          urgency: bloodRequest.urgency,
+          status: bloodRequest.status,
+          createdAt: bloodRequest.createdAt.toISOString(),
+        },
+        acceptances: acceptances.map((acc) => ({
+          id: acc._id.toString(),
+          safeDonorCode: acc.safeDonorCode,
+          status: acc.status,
+          acceptedAt: acc.createdAt.toISOString(),
+        })),
+        count: acceptances.length,
+      });
+    } catch (error) {
+      console.error('[requests] Error fetching acceptances:', error);
+      res.status(500).json({ message: 'An error occurred while fetching donor acceptances.' });
     }
   },
 );

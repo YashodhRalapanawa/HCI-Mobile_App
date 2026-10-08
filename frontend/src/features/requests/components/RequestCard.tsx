@@ -12,6 +12,7 @@ import type { MyRequestSummaryItem, RequestStatus } from '../types';
 interface RequestCardProps {
   item: MyRequestSummaryItem;
   onPressDetails: (item: MyRequestSummaryItem) => void;
+  onPressViewDonor?: (item: MyRequestSummaryItem) => void;
 }
 
 interface StatusVisualConfig {
@@ -24,7 +25,20 @@ interface StatusVisualConfig {
   actionText: string;
 }
 
-function getStatusConfig(status: RequestStatus): StatusVisualConfig {
+function getStatusConfig(status: RequestStatus, acceptedDonorsCount?: number): StatusVisualConfig {
+  if (acceptedDonorsCount && acceptedDonorsCount > 0) {
+    const isSingle = acceptedDonorsCount === 1;
+    return {
+      label: isSingle ? '1 Donor Accepted' : `${acceptedDonorsCount} Donors Accepted`,
+      supportingText: 'A donor has responded to this blood request. Tap below to view donor response details.',
+      badgeBg: '#DCFCE7',
+      badgeTextColor: '#166534',
+      badgeBorderColor: '#86EFAC',
+      iconName: 'checkmark-circle',
+      actionText: 'VIEW DONOR',
+    };
+  }
+
   switch (status) {
     case 'pending_verification':
       return {
@@ -80,9 +94,10 @@ function getStatusConfig(status: RequestStatus): StatusVisualConfig {
   }
 }
 
-export function RequestCard({ item, onPressDetails }: RequestCardProps) {
+export function RequestCard({ item, onPressDetails, onPressViewDonor }: RequestCardProps) {
   const [copied, setCopied] = useState(false);
-  const statusConfig = getStatusConfig(item.status);
+  const hasAcceptedDonors = Boolean(item.acceptedDonorsCount && item.acceptedDonorsCount > 0);
+  const statusConfig = getStatusConfig(item.status, item.acceptedDonorsCount);
 
   const handleCopyReference = async () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -176,18 +191,44 @@ export function RequestCard({ item, onPressDetails }: RequestCardProps) {
       </View>
 
       {/* Contextual Action Button */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => onPressDetails(item)}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={`${statusConfig.actionText} for request ${item.id}`}
-        >
-          <Text style={styles.actionBtnText}>{statusConfig.actionText}</Text>
-          <Ionicons name="chevron-forward" size={15} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
+      {hasAcceptedDonors && onPressViewDonor ? (
+        <View style={styles.actionRowWithBoth}>
+          <TouchableOpacity
+            style={styles.viewDonorBtn}
+            onPress={() => onPressViewDonor(item)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`VIEW DONOR for request ${item.id}`}
+          >
+            <Ionicons name="person-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 5 }} />
+            <Text style={styles.viewDonorBtnText}>VIEW DONOR</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryDetailsBtn}
+            onPress={() => onPressDetails(item)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`View request details for ${item.id}`}
+          >
+            <Text style={styles.secondaryDetailsBtnText}>Details</Text>
+            <Ionicons name="chevron-forward" size={13} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => onPressDetails(item)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`${statusConfig.actionText} for request ${item.id}`}
+          >
+            <Text style={styles.actionBtnText}>{statusConfig.actionText}</Text>
+            <Ionicons name="chevron-forward" size={15} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -336,5 +377,46 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
     marginRight: 4,
+  },
+  actionRowWithBoth: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  viewDonorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DC2626',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: borderRadius.sm,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  viewDonorBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
+  },
+  secondaryDetailsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: borderRadius.sm,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  secondaryDetailsBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+    marginRight: 2,
   },
 });

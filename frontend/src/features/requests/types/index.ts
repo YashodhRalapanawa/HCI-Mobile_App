@@ -64,7 +64,33 @@ export interface MyRequestSummaryItem {
   hospitalReferenceAndWard: string;
   urgency: UrgencyType;
   status: RequestStatus;
+  acceptedDonorsCount?: number;
   createdAt: string;
+}
+
+export interface DonorAcceptanceSummary {
+  id: string;
+  safeDonorCode: string;
+  status: 'accepted' | 'withdrawn' | 'completed';
+  acceptedAt: string;
+}
+
+export interface RequestAcceptancesResponse {
+  request: {
+    id: string;
+    patientName: string;
+    bloodGroup: BloodGroupType;
+    unitsRequired: number;
+    unitsFulfilled: number;
+    hospitalId: string;
+    hospitalName: string;
+    hospitalReferenceAndWard: string;
+    urgency: UrgencyType;
+    status: RequestStatus;
+    createdAt: string;
+  };
+  acceptances: DonorAcceptanceSummary[];
+  count: number;
 }
 
 export interface MyRequestsPagination {
