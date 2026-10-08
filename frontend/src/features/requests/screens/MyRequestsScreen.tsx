@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '@/theme';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -20,11 +20,15 @@ import { BottomNavBar } from '@/components/BottomNavBar';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { requestApi } from '../services/requestApi';
 import { RequestCard } from '../components/RequestCard';
-import type { MyRequestSummaryItem, MyRequestsTab } from '../types';
+import { DeliveryAssignedModal } from '../components/DeliveryAssignedModal';
+import type { DeliveryAssignmentInfo, MyRequestSummaryItem, MyRequestsTab } from '../types';
 
 export function MyRequestsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ preview?: string }>();
   const { token } = useAuth();
+
+  const isDevPreviewActive = params.preview === 'delivery_assigned';
 
   const [activeTab, setActiveTab] = useState<MyRequestsTab>('active');
   const [requests, setRequests] = useState<MyRequestSummaryItem[]>([]);
@@ -40,6 +44,15 @@ export function MyRequestsScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Member 2.4 Delivery Assignment Modal state
+  const [deliveryModalVisible, setDeliveryModalVisible] = useState(false);
+  const [selectedDeliveryRequest, setSelectedDeliveryRequest] = useState<MyRequestSummaryItem | null>(null);
+  const [deliveryAssignmentData, setDeliveryAssignmentData] = useState<DeliveryAssignmentInfo | null>(null);
+  const [deliveryHospitalName, setDeliveryHospitalName] = useState<string | undefined>(undefined);
+  const [deliveryHospitalWard, setDeliveryHospitalWard] = useState<string | undefined>(undefined);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
 
   // Sequence ref to prevent race conditions from rapid tab switching
   const requestSeqRef = useRef(0);
@@ -170,6 +183,42 @@ export function MyRequestsScreen() {
     router.push('/requests/new');
   };
 
+  const handlePressViewDelivery = useCallback(
+    async (item: MyRequestSummaryItem) => {
+      setSelectedDeliveryRequest(item);
+      setDeliveryAssignmentData(null);
+      setDeliveryHospitalName(item.hospitalName);
+      setDeliveryHospitalWard(item.hospitalReferenceAndWard);
+      setDeliveryError(null);
+      setDeliveryModalVisible(true);
+
+      if (!token) return;
+
+      setDeliveryLoading(true);
+      try {
+        const res = await requestApi.getDeliveryAssignment(token, item.id);
+        setDeliveryAssignmentData(res.deliveryAssignment);
+        if (res.hospitalName) setDeliveryHospitalName(res.hospitalName);
+        if (res.hospitalReferenceAndWard) setDeliveryHospitalWard(res.hospitalReferenceAndWard);
+      } catch (err: any) {
+        setDeliveryError(err?.message || 'Failed to load delivery assignment details.');
+      } finally {
+        setDeliveryLoading(false);
+      }
+    },
+    [token],
+  );
+
+  const handleCloseDeliveryModal = useCallback(() => {
+    setDeliveryModalVisible(false);
+    setSelectedDeliveryRequest(null);
+    setDeliveryAssignmentData(null);
+    setDeliveryError(null);
+    if (isDevPreviewActive) {
+      router.replace('/requests/my');
+    }
+  }, [isDevPreviewActive, router]);
+
   const handlePressEdit = (item: MyRequestSummaryItem) => {
     router.push(`/requests/${item.id}/edit` as any);
   };
@@ -271,7 +320,7 @@ export function MyRequestsScreen() {
 
         {__DEV__ && (
           <View style={styles.devSwitcherWrapper}>
-            <ScreenSwitcher currentScreenId={21} />
+            <ScreenSwitcher currentScreenId={isDevPreviewActive ? 22 : 21} />
           </View>
         )}
       </View>
@@ -454,6 +503,7 @@ export function MyRequestsScreen() {
             onPressDetails={handlePressDetails}
             onPressEdit={handlePressEdit}
             onPressDelete={handlePressDelete}
+            onPressViewDelivery={handlePressViewDelivery}
             isDeleting={isDeleting && deletingId === item.id}
           />
         )}
@@ -550,6 +600,48 @@ export function MyRequestsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Member 2.4 Delivery Person Assigned Modal */}
+      <DeliveryAssignedModal
+        visible={deliveryModalVisible || isDevPreviewActive}
+        onClose={handleCloseDeliveryModal}
+        isDevPreview={isDevPreviewActive}
+        requestId={isDevPreviewActive ? 'BR-SAMPLE-024' : selectedDeliveryRequest?.id}
+        patientName={isDevPreviewActive ? 'Nimal Perera' : selectedDeliveryRequest?.patientName}
+        bloodGroup={isDevPreviewActive ? 'B-' : selectedDeliveryRequest?.bloodGroup}
+        hospitalName={
+          isDevPreviewActive
+            ? 'National Blood Center / City Hospital'
+            : deliveryHospitalName || selectedDeliveryRequest?.hospitalName
+        }
+        hospitalReferenceAndWard={
+          isDevPreviewActive
+            ? 'Ward 4B · Bed 12'
+            : deliveryHospitalWard || selectedDeliveryRequest?.hospitalReferenceAndWard
+        }
+        deliveryPersonName={
+          isDevPreviewActive
+            ? 'Sunil Perera (Blood Bank Courier)'
+            : deliveryAssignmentData?.deliveryPersonName
+        }
+        contactPhone={
+          isDevPreviewActive
+            ? '+94 77 123 4567'
+            : deliveryAssignmentData?.contactPhone
+        }
+        assignedAt={
+          isDevPreviewActive
+            ? new Date().toISOString()
+            : deliveryAssignmentData?.assignedAt
+        }
+        loading={!isDevPreviewActive && deliveryLoading}
+        errorMessage={!isDevPreviewActive ? deliveryError : null}
+        onRetry={
+          selectedDeliveryRequest
+            ? () => void handlePressViewDelivery(selectedDeliveryRequest)
+            : undefined
+        }
+      />
 
       {/* Shared Bottom Navigation Bar */}
       <BottomNavBar activeTab="home" />

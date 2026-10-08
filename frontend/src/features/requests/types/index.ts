@@ -38,6 +38,7 @@ export interface CreatedRequestResponse {
     mimeType: string;
     sizeBytes: number;
   };
+  deliveryAssignment?: DeliveryAssignmentInfo | null;
   createdAt: string;
 }
 
@@ -53,6 +54,20 @@ export interface CreateRequestFormValues {
 
 export type MyRequestsTab = 'active' | 'completed';
 
+export interface DeliveryAssignmentInfo {
+  assignmentId: string;
+  deliveryPersonName: string;
+  contactPhone: string;
+  assignedAt: string;
+}
+
+export interface RequestDeliveryAssignmentResponse {
+  deliveryAssignment: DeliveryAssignmentInfo | null;
+  hospitalName?: string;
+  hospitalReferenceAndWard?: string;
+  message?: string;
+}
+
 export interface MyRequestSummaryItem {
   id: string;
   patientName: string;
@@ -65,6 +80,7 @@ export interface MyRequestSummaryItem {
   urgency: UrgencyType;
   status: RequestStatus;
   acceptedDonorsCount?: number;
+  hasDeliveryAssignment?: boolean;
   createdAt: string;
 }
 

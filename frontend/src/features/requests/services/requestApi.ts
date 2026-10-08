@@ -6,6 +6,7 @@ import type {
   MyRequestsTab,
   MyRequestsResponse,
   RequestAcceptancesResponse,
+  RequestDeliveryAssignmentResponse,
 } from '../types';
 
 export const requestApi = {
@@ -176,6 +177,21 @@ export const requestApi = {
       `requests/${encodeURIComponent(id)}`,
       {
         method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+  },
+
+  getDeliveryAssignment: async (
+    token: string,
+    requestId: string,
+  ): Promise<RequestDeliveryAssignmentResponse> => {
+    return apiRequest<RequestDeliveryAssignmentResponse>(
+      `requests/${encodeURIComponent(requestId)}/delivery-assignment`,
+      {
+        method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
         },

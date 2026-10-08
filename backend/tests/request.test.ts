@@ -1349,6 +1349,145 @@ test('HTTP Request Routes Integration', async (t) => {
               assert.equal(fs.existsSync(testFilePath), false);
             });
           });
+
+          // 14. Member 2.4 Delivery Assignment Verification
+          await subT.test('Member 2.4 Delivery Assignment Verification', async (assignT) => {
+            assert.ok(createdRequestId);
+            assert.ok(createdUserId);
+            assert.ok(secondUserId);
+            const reqId = createdRequestId;
+            const otherUserToken = secondUserToken;
+
+            // 14.1 Owner-only assignment access (reject unauthenticated & non-owner)
+            await assignT.test('rejects unauthenticated and non-owner access to delivery assignment', async () => {
+              // Unauthenticated
+              const unauthRes = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment`);
+              assert.equal(unauthRes.status, 401);
+
+              // Non-owner
+              const nonOwnerRes = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment`, {
+                headers: { Authorization: `Bearer ${otherUserToken}` },
+              });
+              assert.equal(nonOwnerRes.status, 403);
+              const body = (await nonOwnerRes.json()) as { message: string };
+              assert.match(body.message, /permission/i);
+            });
+
+            // 14.2 No-assignment response returns 200 with deliveryAssignment: null
+            await assignT.test('returns deliveryAssignment null when no delivery person is assigned', async () => {
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment`, {
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+              assert.equal(res.status, 200);
+              const body = (await res.json()) as { deliveryAssignment: unknown; message?: string; hospitalName: string };
+              assert.equal(body.deliveryAssignment, null);
+              assert.ok(body.hospitalName);
+            });
+
+            // 14.3 Safe assignment fields returned when delivery person is assigned
+            await assignT.test('returns safe delivery assignment fields for owner and hides phone from summary list', async () => {
+              // Simulate staff/admin assigning a delivery person in DB
+              const assignedAtDate = new Date();
+              await BloodRequest.findByIdAndUpdate(reqId, {
+                status: 'verified',
+                deliveryAssignment: {
+                  assignmentId: 'ASG-TEST-101',
+                  deliveryPersonName: 'Sunil Fernando',
+                  contactPhone: '+94 77 123 4567',
+                  assignedAt: assignedAtDate,
+                },
+              });
+
+              // Detailed endpoint returns full assignment info
+              const detailRes = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment`, {
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+              assert.equal(detailRes.status, 200);
+              const detailBody = (await detailRes.json()) as {
+                deliveryAssignment: {
+                  assignmentId: string;
+                  deliveryPersonName: string;
+                  contactPhone: string;
+                  assignedAt: string;
+                };
+                hospitalName: string;
+              };
+              assert.ok(detailBody.deliveryAssignment);
+              assert.equal(detailBody.deliveryAssignment.assignmentId, 'ASG-TEST-101');
+              assert.equal(detailBody.deliveryAssignment.deliveryPersonName, 'Sunil Fernando');
+              assert.equal(detailBody.deliveryAssignment.contactPhone, '+94 77 123 4567');
+              assert.ok(detailBody.hospitalName);
+
+              // Broad list response (GET /api/requests/my) must indicate hasDeliveryAssignment: true without leaking contact phone
+              const listRes = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=active`, {
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+              assert.equal(listRes.status, 200);
+              const listBody = (await listRes.json()) as {
+                requests: Array<{
+                  id: string;
+                  hasDeliveryAssignment?: boolean;
+                  contactPhone?: string;
+                }>;
+              };
+              const targetItem = listBody.requests.find((r) => r.id === reqId);
+              assert.ok(targetItem);
+              assert.equal(targetItem.hasDeliveryAssignment, true);
+              assert.equal(targetItem.contactPhone, undefined);
+
+              // Clean up assignment
+              await BloodRequest.findByIdAndUpdate(reqId, {
+                status: 'pending_verification',
+                $unset: { deliveryAssignment: 1 },
+              });
+            });
+
+            // 14.4 Patient APIs cannot set or change delivery assignment
+            await assignT.test('patient APIs cannot set or change delivery assignment', async () => {
+              // Attempt to inject deliveryAssignment via PATCH
+              const patchRes = await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}`, {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${realJwtToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  patientName: 'Legit Patient',
+                  bloodGroup: 'B-',
+                  unitsRequired: 3,
+                  hospitalId: 'hosp-colombo-city',
+                  hospitalReferenceAndWard: 'Ward 05',
+                  urgency: 'Urgent',
+                  deliveryAssignment: {
+                    assignmentId: 'HACKED-ASG',
+                    deliveryPersonName: 'Impostor',
+                    contactPhone: '000',
+                  },
+                }),
+              });
+              assert.equal(patchRes.status, 200);
+
+              // Verify DB record does not have the injected assignment
+              const doc = await BloodRequest.findById(reqId);
+              assert.ok(doc);
+              assert.equal(doc.deliveryAssignment, undefined);
+            });
+
+            // 14.5 Reading assignment is strictly read-only and does not mutate request status
+            await assignT.test('reading delivery assignment is read-only and does not mutate request status', async () => {
+              const initialDoc = await BloodRequest.findById(reqId);
+              assert.ok(initialDoc);
+              const initialStatus = initialDoc.status;
+
+              await fetch(`http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment`, {
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+              });
+
+              const postDoc = await BloodRequest.findById(reqId);
+              assert.ok(postDoc);
+              assert.equal(postDoc.status, initialStatus);
+            });
+          });
         } finally {
           for (const reqId of extraReqIds) {
             await BloodRequest.findByIdAndDelete(reqId);

@@ -43,6 +43,14 @@ function serializeRequest(reqDoc: BloodRequestDocument) {
       mimeType: reqDoc.document.mimeType,
       sizeBytes: reqDoc.document.sizeBytes,
     },
+    deliveryAssignment: reqDoc.deliveryAssignment
+      ? {
+          assignmentId: reqDoc.deliveryAssignment.assignmentId,
+          deliveryPersonName: reqDoc.deliveryAssignment.deliveryPersonName,
+          contactPhone: reqDoc.deliveryAssignment.contactPhone,
+          assignedAt: reqDoc.deliveryAssignment.assignedAt.toISOString(),
+        }
+      : null,
     createdAt: reqDoc.createdAt.toISOString(),
   };
 }
@@ -179,6 +187,7 @@ function serializeRequestSummary(reqDoc: BloodRequestDocument, acceptedDonorsCou
     urgency: reqDoc.urgency,
     status: reqDoc.status,
     acceptedDonorsCount,
+    hasDeliveryAssignment: Boolean(reqDoc.deliveryAssignment?.assignmentId),
     createdAt: reqDoc.createdAt.toISOString(),
   };
 }
@@ -669,3 +678,66 @@ requestRouter.get(
     }
   },
 );
+
+/**
+ * GET /api/requests/:id/delivery-assignment
+ * Retrieves owner-protected delivery person assignment details for a blood request.
+ * Authenticated via JWT. Validates ownership (req.user._id === bloodRequest.requesterId).
+ * Returns assigned delivery person details along with saved hospital context.
+ * Strictly read-only: does not modify request status or any database records.
+ */
+requestRouter.get(
+  '/:id/delivery-assignment',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.isValidObjectId(id)) {
+        res.status(400).json({ message: 'Invalid request ID format.' });
+        return;
+      }
+
+      const bloodRequest = await BloodRequest.findById(id);
+      if (!bloodRequest) {
+        res.status(404).json({ message: 'Blood request not found.' });
+        return;
+      }
+
+      // Enforce owner-only access: only the original requester can view delivery assignment
+      if (bloodRequest.requesterId.toString() !== req.user!._id.toString()) {
+        res.status(403).json({
+          message: 'You do not have permission to view delivery assignment for this request.',
+        });
+        return;
+      }
+
+      if (!bloodRequest.deliveryAssignment) {
+        res.status(200).json({
+          deliveryAssignment: null,
+          hospitalName: bloodRequest.hospitalName,
+          hospitalReferenceAndWard: bloodRequest.hospitalReferenceAndWard,
+          message: 'No delivery person assigned to this request yet.',
+        });
+        return;
+      }
+
+      res.status(200).json({
+        deliveryAssignment: {
+          assignmentId: bloodRequest.deliveryAssignment.assignmentId,
+          deliveryPersonName: bloodRequest.deliveryAssignment.deliveryPersonName,
+          contactPhone: bloodRequest.deliveryAssignment.contactPhone,
+          assignedAt: bloodRequest.deliveryAssignment.assignedAt.toISOString(),
+        },
+        hospitalName: bloodRequest.hospitalName,
+        hospitalReferenceAndWard: bloodRequest.hospitalReferenceAndWard,
+      });
+    } catch (error) {
+      console.error('[requests] Error fetching delivery assignment:', error);
+      res.status(500).json({
+        message: 'An error occurred while fetching delivery assignment details.',
+      });
+    }
+  },
+);
+

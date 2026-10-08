@@ -14,6 +14,7 @@ interface RequestCardProps {
   onPressDetails: (item: MyRequestSummaryItem) => void;
   onPressEdit?: (item: MyRequestSummaryItem) => void;
   onPressDelete?: (item: MyRequestSummaryItem) => void;
+  onPressViewDelivery?: (item: MyRequestSummaryItem) => void;
   isDeleting?: boolean;
 }
 
@@ -27,7 +28,7 @@ interface StatusVisualConfig {
   actionText: string;
 }
 
-function getStatusConfig(status: RequestStatus): StatusVisualConfig {
+function getStatusConfig(status: RequestStatus, hasDeliveryAssignment?: boolean): StatusVisualConfig {
   switch (status) {
     case 'pending_verification':
       return {
@@ -40,23 +41,25 @@ function getStatusConfig(status: RequestStatus): StatusVisualConfig {
         actionText: 'View request details',
       };
     case 'verified':
-      return {
-        label: 'Hospital Verified',
-        supportingText: 'Hospital has verified this request. Nearby eligible donors are being notified.',
-        badgeBg: '#DCFCE7',
-        badgeTextColor: '#166534',
-        badgeBorderColor: '#86EFAC',
-        iconName: 'shield-checkmark-outline',
-        actionText: 'View request details',
-      };
     case 'in_progress':
+      if (hasDeliveryAssignment) {
+        return {
+          label: 'Delivery person assigned',
+          supportingText: 'A hospital delivery person has been assigned to transfer blood units for this request.',
+          badgeBg: '#DCFCE7',
+          badgeTextColor: '#166534',
+          badgeBorderColor: '#86EFAC',
+          iconName: 'checkmark-circle-outline',
+          actionText: 'View request details',
+        };
+      }
       return {
-        label: 'Donation In Progress',
-        supportingText: 'Blood donation is currently underway. Full donor tracking arrives in a later phase.',
-        badgeBg: '#DBEAFE',
-        badgeTextColor: '#1E40AF',
-        badgeBorderColor: '#93C5FD',
-        iconName: 'pulse-outline',
+        label: 'Awaiting delivery assignment',
+        supportingText: 'Hospital has verified this request. Awaiting blood bank delivery assignment.',
+        badgeBg: '#FEF3C7',
+        badgeTextColor: '#92400E',
+        badgeBorderColor: '#FDE68A',
+        iconName: 'time-outline',
         actionText: 'View request details',
       };
     case 'fulfilled':
@@ -88,10 +91,11 @@ export function RequestCard({
   onPressDetails,
   onPressEdit,
   onPressDelete,
+  onPressViewDelivery,
   isDeleting = false,
 }: RequestCardProps) {
   const [copied, setCopied] = useState(false);
-  const statusConfig = getStatusConfig(item.status);
+  const statusConfig = getStatusConfig(item.status, item.hasDeliveryAssignment);
   const isPending = item.status === 'pending_verification';
 
   const handleCopyReference = async () => {
@@ -222,6 +226,32 @@ export function RequestCard({
             style={[styles.actionBtn, isDeleting && styles.disabledBtn]}
             onPress={() => onPressDetails(item)}
             disabled={isDeleting}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`${statusConfig.actionText} for request ${item.id}`}
+          >
+            <Text style={styles.actionBtnText}>Details</Text>
+            <Ionicons name="chevron-forward" size={15} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      ) : item.hasDeliveryAssignment ? (
+        <View style={styles.actionRowWithAssigned}>
+          {onPressViewDelivery ? (
+            <TouchableOpacity
+              style={styles.deliveryBtn}
+              onPress={() => onPressViewDelivery(item)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`View delivery for request ${item.id}`}
+            >
+              <Ionicons name="bicycle" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
+              <Text style={styles.deliveryBtnText}>VIEW DELIVERY</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => onPressDetails(item)}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={`${statusConfig.actionText} for request ${item.id}`}
@@ -398,6 +428,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 4,
+  },
+  actionRowWithAssigned: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  deliveryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16A34A',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+    shadowColor: '#16A34A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  deliveryBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
   actionRowWithPending: {
     flexDirection: 'row',

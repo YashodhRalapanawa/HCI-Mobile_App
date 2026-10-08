@@ -17,6 +17,13 @@ export interface RequestDocumentMetadata {
   storageKey: string;
 }
 
+export interface DeliveryAssignment {
+  assignmentId: string;
+  deliveryPersonName: string;
+  contactPhone: string;
+  assignedAt: Date;
+}
+
 export interface BloodRequestDocument extends Document {
   requesterId: Types.ObjectId;
   patientName: string;
@@ -29,9 +36,20 @@ export interface BloodRequestDocument extends Document {
   urgency: RequestUrgency;
   document: RequestDocumentMetadata;
   status: RequestStatus;
+  deliveryAssignment?: DeliveryAssignment;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const deliveryAssignmentSchema = new Schema<DeliveryAssignment>(
+  {
+    assignmentId: { type: String, required: true, trim: true },
+    deliveryPersonName: { type: String, required: true, trim: true },
+    contactPhone: { type: String, required: true, trim: true },
+    assignedAt: { type: Date, required: true, default: Date.now },
+  },
+  { _id: false },
+);
 
 const documentMetadataSchema = new Schema<RequestDocumentMetadata>(
   {
@@ -105,6 +123,10 @@ const bloodRequestSchema = new Schema<BloodRequestDocument>(
       enum: ['pending_verification', 'verified', 'in_progress', 'fulfilled', 'cancelled'],
       default: 'pending_verification',
       index: true,
+    },
+    deliveryAssignment: {
+      type: deliveryAssignmentSchema,
+      required: false,
     },
   },
   { timestamps: true },
