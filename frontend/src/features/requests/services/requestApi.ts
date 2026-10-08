@@ -65,6 +65,65 @@ export const requestApi = {
     });
   },
 
+  updateRequest: async (
+    token: string,
+    id: string,
+    values: CreateRequestFormValues,
+  ): Promise<{ message: string; request: CreatedRequestResponse }> => {
+    const formData = new FormData();
+    formData.append('patientName', values.patientName.trim());
+    formData.append('bloodGroup', values.bloodGroup);
+    formData.append('unitsRequired', String(values.unitsRequired));
+    formData.append('hospitalId', values.hospitalId);
+    formData.append('hospitalReferenceAndWard', values.hospitalReferenceAndWard.trim());
+    formData.append('urgency', values.urgency);
+
+    if (values.document) {
+      if (
+        typeof window !== 'undefined' &&
+        (values.document.file instanceof Blob ||
+          (typeof File !== 'undefined' && values.document.file instanceof File))
+      ) {
+        formData.append('document', values.document.file, values.document.name);
+      } else if (
+        typeof window !== 'undefined' &&
+        values.document.uri &&
+        (values.document.uri.startsWith('blob:') || values.document.uri.startsWith('data:'))
+      ) {
+        try {
+          const fetched = await fetch(values.document.uri);
+          const blob = await fetched.blob();
+          formData.append('document', blob, values.document.name);
+        } catch {
+          const fileObj: any = {
+            uri: values.document.uri,
+            name: values.document.name,
+            type: values.document.mimeType || 'application/octet-stream',
+          };
+          formData.append('document', fileObj);
+        }
+      } else {
+        const fileObj: any = {
+          uri: values.document.uri,
+          name: values.document.name,
+          type: values.document.mimeType || 'application/octet-stream',
+        };
+        formData.append('document', fileObj);
+      }
+    }
+
+    return apiRequest<{ message: string; request: CreatedRequestResponse }>(
+      `requests/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      },
+    );
+  },
+
   getRequestById: async (token: string, id: string): Promise<CreatedRequestResponse> => {
     const res = await apiRequest<{ request: CreatedRequestResponse }>(`requests/${encodeURIComponent(id)}`, {
       method: 'GET',

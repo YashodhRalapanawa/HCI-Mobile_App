@@ -10,6 +10,7 @@ interface DocumentUploadBoxProps {
   onSelectDocument: (doc: SelectedDocument | null) => void;
   error?: string;
   disabled?: boolean;
+  existingDocumentName?: string;
 }
 
 export function DocumentUploadBox({
@@ -17,6 +18,7 @@ export function DocumentUploadBox({
   onSelectDocument,
   error,
   disabled = false,
+  existingDocumentName,
 }: DocumentUploadBoxProps) {
   const handlePickDocument = async () => {
     if (disabled) return;
@@ -51,22 +53,24 @@ export function DocumentUploadBox({
     return `${Math.round(kb)} KB`;
   };
 
+  const hasFile = Boolean(document || existingDocumentName);
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
         style={[
           styles.uploadBox,
           Boolean(error) && styles.uploadBoxError,
-          Boolean(document) && styles.uploadBoxFilled,
+          hasFile && styles.uploadBoxFilled,
         ]}
         onPress={handlePickDocument}
         activeOpacity={0.7}
         disabled={disabled}
       >
         <View style={styles.contentRow}>
-          <View style={[styles.iconBox, Boolean(document) && styles.iconBoxFilled]}>
+          <View style={[styles.iconBox, hasFile && styles.iconBoxFilled]}>
             <Ionicons
-              name={document ? 'document-text' : 'cloud-upload-outline'}
+              name={hasFile ? 'document-text' : 'cloud-upload-outline'}
               size={24}
               color={colors.primary}
             />
@@ -80,6 +84,15 @@ export function DocumentUploadBox({
                 </Text>
                 <Text style={styles.fileMeta}>
                   {formatFileSize(document.size)} • Tap to replace file
+                </Text>
+              </>
+            ) : existingDocumentName ? (
+              <>
+                <Text style={styles.fileName} numberOfLines={1}>
+                  {existingDocumentName}
+                </Text>
+                <Text style={styles.fileMeta}>
+                  Saved document attached • Tap to replace
                 </Text>
               </>
             ) : (
@@ -98,6 +111,8 @@ export function DocumentUploadBox({
                 onSelectDocument(null);
               }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Remove newly selected document"
             >
               <Ionicons name="close-circle" size={20} color={colors.textMuted} />
             </TouchableOpacity>

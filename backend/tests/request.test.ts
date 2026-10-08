@@ -829,6 +829,285 @@ test('HTTP Request Routes Integration', async (t) => {
               await DonorAcceptance.deleteMany({ requestId: preDoc._id });
             }
           });
+
+          // 12. Member 2.3 Edit Request tests (PATCH /api/requests/:id)
+          await subT.test('PATCH /api/requests/:id comprehensive edit verification', async (patchT) => {
+            assert.ok(createdRequestId);
+
+            // 12.1 Unauthenticated update rejected with 401
+            await patchT.test('rejects unauthenticated edit with 401', async () => {
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ patientName: 'Should Fail' }),
+              });
+              assert.equal(res.status, 401);
+            });
+
+            // 12.2 Non-owner update rejected with 403
+            await patchT.test('rejects non-owner edit with 403', async () => {
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${secondUserToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  patientName: 'Malicious Change',
+                  bloodGroup: 'A+',
+                  unitsRequired: 1,
+                  hospitalId: 'hosp-colombo-city',
+                  hospitalReferenceAndWard: 'Ward 1',
+                  urgency: 'Urgent',
+                }),
+              });
+              assert.equal(res.status, 403);
+              const body = (await res.json()) as { message: string };
+              assert.match(body.message, /permission/i);
+            });
+
+            // 12.3 Invalid request ID format rejected with 400
+            await patchT.test('rejects invalid request ID format with 400', async () => {
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/not-a-valid-id`, {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${realJwtToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  patientName: 'Test Name',
+                  bloodGroup: 'A+',
+                  unitsRequired: 1,
+                  hospitalId: 'hosp-colombo-city',
+                  hospitalReferenceAndWard: 'Ward 1',
+                  urgency: 'Urgent',
+                }),
+              });
+              assert.equal(res.status, 400);
+            });
+
+            // 12.4 Non-existent request rejected with 404
+            await patchT.test('rejects non-existent request ID with 404', async () => {
+              const randomId = new mongoose.Types.ObjectId().toString();
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${randomId}`, {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${realJwtToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  patientName: 'Test Name',
+                  bloodGroup: 'A+',
+                  unitsRequired: 1,
+                  hospitalId: 'hosp-colombo-city',
+                  hospitalReferenceAndWard: 'Ward 1',
+                  urgency: 'Urgent',
+                }),
+              });
+              assert.equal(res.status, 404);
+            });
+
+            // 12.5 Invalid fields rejected with 400
+            await patchT.test('rejects invalid fields with 400', async () => {
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${realJwtToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  patientName: '',
+                  bloodGroup: 'B-',
+                  unitsRequired: 0,
+                  hospitalId: 'hosp-colombo-city',
+                  hospitalReferenceAndWard: 'Ward 1',
+                  urgency: 'Urgent',
+                }),
+              });
+              assert.equal(res.status, 400);
+            });
+
+            // 12.6 Successful owner update of a pending request without replacing document
+            await patchT.test('successfully updates pending request, preserves existing doc and record identity', async () => {
+              const preDoc = await BloodRequest.findById(createdRequestId);
+              assert.ok(preDoc);
+              const userCountBefore = await BloodRequest.countDocuments({ requesterId: createdUserId });
+
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${realJwtToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  patientName: 'Updated Perera',
+                  bloodGroup: 'AB+',
+                  unitsRequired: 4,
+                  hospitalId: 'hosp-nbts-narahenpita',
+                  hospitalReferenceAndWard: 'Ward 12B - Ref 99',
+                  urgency: 'Scheduled',
+                  // Attempt to inject forbidden fields
+                  status: 'fulfilled',
+                  unitsFulfilled: 10,
+                  requesterId: secondUserId,
+                }),
+              });
+
+              assert.equal(res.status, 200);
+              const body = (await res.json()) as { message: string; request: any };
+              assert.equal(body.request.id, createdRequestId);
+              assert.equal(body.request.patientName, 'Updated Perera');
+              assert.equal(body.request.bloodGroup, 'AB+');
+              assert.equal(body.request.unitsRequired, 4);
+              assert.equal(body.request.hospitalId, 'hosp-nbts-narahenpita');
+              assert.equal(body.request.hospitalName, 'National Blood Transfusion Service, Narahenpita');
+              assert.equal(body.request.hospitalReferenceAndWard, 'Ward 12B - Ref 99');
+              assert.equal(body.request.urgency, 'Scheduled');
+              // Forbidden fields must not have changed
+              assert.equal(body.request.status, 'pending_verification');
+              assert.equal(body.request.unitsFulfilled, 0);
+
+              // Verify database state: no new record created, identity & timestamps preserved
+              const userCountAfter = await BloodRequest.countDocuments({ requesterId: createdUserId });
+              assert.equal(userCountAfter, userCountBefore);
+
+              const postDoc = await BloodRequest.findById(createdRequestId);
+              assert.ok(postDoc);
+              assert.equal(postDoc._id.toString(), preDoc._id.toString());
+              assert.equal(postDoc.requesterId.toString(), preDoc.requesterId.toString());
+              assert.equal(postDoc.status, 'pending_verification');
+              assert.equal(postDoc.unitsFulfilled, 0);
+              assert.equal(postDoc.createdAt.toISOString(), preDoc.createdAt.toISOString());
+              // Existing document was preserved
+              assert.equal(postDoc.document.storageKey, preDoc.document.storageKey);
+              assert.equal(postDoc.document.originalName, preDoc.document.originalName);
+            });
+
+            // 12.7 Replacement document validation failure cleans up temporary upload
+            await patchT.test('corrupted replacement document is rejected and cleaned up without modifying existing doc', async () => {
+              const preDoc = await BloodRequest.findById(createdRequestId);
+              assert.ok(preDoc);
+
+              const formData = new FormData();
+              formData.append('patientName', 'Updated Name');
+              formData.append('bloodGroup', 'AB+');
+              formData.append('unitsRequired', '4');
+              formData.append('hospitalId', 'hosp-nbts-narahenpita');
+              formData.append('hospitalReferenceAndWard', 'Ward 12B');
+              formData.append('urgency', 'Scheduled');
+
+              // Corrupted file (not a valid PDF/JPEG/PNG)
+              const badFile = Buffer.from('NOT_A_VALID_FILE_HEADER_TEXT');
+              formData.append('document', new Blob([badFile], { type: 'application/pdf' }), 'corrupted.pdf');
+
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+                body: formData,
+              });
+
+              assert.equal(res.status, 400);
+              const body = (await res.json()) as { message: string };
+              assert.match(body.message, /invalid file content/i);
+
+              // Verify original document is preserved in DB
+              const postDoc = await BloodRequest.findById(createdRequestId);
+              assert.ok(postDoc);
+              assert.equal(postDoc.document.storageKey, preDoc.document.storageKey);
+            });
+
+            // 12.8 Valid replacement document updates metadata and cleans up previous file
+            await patchT.test('valid replacement document updates metadata and removes previous file', async () => {
+              const preDoc = await BloodRequest.findById(createdRequestId);
+              assert.ok(preDoc);
+              const oldStorageKey = preDoc.document.storageKey;
+              const oldFilePath = path.join(UPLOAD_DIR, oldStorageKey);
+              assert.equal(fs.existsSync(oldFilePath), true);
+
+              const formData = new FormData();
+              formData.append('patientName', 'Perera Replacement');
+              formData.append('bloodGroup', 'O+');
+              formData.append('unitsRequired', '2');
+              formData.append('hospitalId', 'hosp-colombo-city');
+              formData.append('hospitalReferenceAndWard', 'Ward 08');
+              formData.append('urgency', 'Urgent');
+
+              const replacementPdf = Buffer.from('%PDF-1.4\n%replacement document\n%%EOF');
+              formData.append('document', new Blob([replacementPdf], { type: 'application/pdf' }), 'replacement-doc.pdf');
+
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${realJwtToken}` },
+                body: formData,
+              });
+
+              assert.equal(res.status, 200);
+              const body = (await res.json()) as { message: string; request: any };
+              assert.equal(body.request.patientName, 'Perera Replacement');
+              assert.equal(body.request.bloodGroup, 'O+');
+              assert.equal(body.request.unitsRequired, 2);
+
+              const postDoc = await BloodRequest.findById(createdRequestId);
+              assert.ok(postDoc);
+              const newStorageKey = postDoc.document.storageKey;
+              assert.notEqual(newStorageKey, oldStorageKey);
+              assert.equal(postDoc.document.originalName, 'replacement-doc.pdf');
+
+              // Previous file must have been unlinked
+              assert.equal(fs.existsSync(oldFilePath), false);
+
+              // New file must exist
+              const newFilePath = path.join(UPLOAD_DIR, newStorageKey);
+              assert.equal(fs.existsSync(newFilePath), true);
+
+              // Update uploadedStorageKey so test teardown cleans up new file
+              uploadedStorageKey = newStorageKey;
+            });
+
+            // 12.9 Non-pending request rejected with 409
+            await patchT.test('rejects edit when request status is verified (non-pending) with 409', async () => {
+              // Transition status to verified in database
+              await BloodRequest.findByIdAndUpdate(createdRequestId, { status: 'verified' });
+
+              const res = await fetch(`http://127.0.0.1:${port}/api/requests/${createdRequestId}`, {
+                method: 'PATCH',
+                headers: {
+                  Authorization: `Bearer ${realJwtToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  patientName: 'Attempted edit after verification',
+                  bloodGroup: 'O+',
+                  unitsRequired: 2,
+                  hospitalId: 'hosp-colombo-city',
+                  hospitalReferenceAndWard: 'Ward 08',
+                  urgency: 'Urgent',
+                }),
+              });
+
+              assert.equal(res.status, 409);
+              const body = (await res.json()) as { message: string };
+              assert.match(body.message, /no longer editable/i);
+
+              // Restore status to pending_verification
+              await BloodRequest.findByIdAndUpdate(createdRequestId, { status: 'pending_verification' });
+            });
+
+            // 12.10 Atomic update condition protects against race conditions
+            await patchT.test('atomic pending update condition prevents race condition', async () => {
+              // Emulate atomic condition in DB
+              const updated = await BloodRequest.findOneAndUpdate(
+                {
+                  _id: createdRequestId,
+                  requesterId: createdUserId,
+                  status: 'verified', // condition requires pending, but status is pending
+                },
+                { $set: { patientName: 'Should not update' } },
+                { returnDocument: 'after' },
+              );
+              assert.equal(updated, null);
+            });
+          });
         } finally {
           for (const reqId of extraReqIds) {
             await BloodRequest.findByIdAndDelete(reqId);

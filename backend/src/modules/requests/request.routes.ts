@@ -1,9 +1,15 @@
+import path from 'node:path';
 import { Router, type Response } from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { authenticate, type AuthenticatedRequest } from '../../middleware/auth.js';
 import { SAMPLE_HOSPITALS, getHospitalById } from './hospital.data.js';
-import { BloodRequest, type BloodRequestDocument, type RequestStatus } from './request.model.js';
+import {
+  BloodRequest,
+  type BloodRequestDocument,
+  type RequestDocumentMetadata,
+  type RequestStatus,
+} from './request.model.js';
 import { DonorAcceptance } from './donorAcceptance.model.js';
 import { createBloodRequestSchema } from './request.validation.js';
 import {
@@ -11,6 +17,7 @@ import {
   validateFileSignature,
   removeUploadedFile,
   MAX_FILE_SIZE_BYTES,
+  UPLOAD_DIR,
 } from './upload.middleware.js';
 
 export const requestRouter = Router();
@@ -327,6 +334,169 @@ requestRouter.get(
     } catch (error) {
       console.error('[requests] Error fetching request by ID:', error);
       res.status(500).json({ message: 'An error occurred while fetching the blood request.' });
+    }
+  },
+);
+
+/**
+ * PATCH /api/requests/:id
+ * Updates an existing blood request owned by the authenticated requester.
+ * Allowed strictly if status is 'pending_verification'.
+ * Re-validates all fields against catalogue and schema.
+ * Supports optional replacement of verification document with cleanup.
+ * Atomic condition guarantees hospital verification cannot be overwritten.
+ */
+requestRouter.patch(
+  '/:id',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response, next): Promise<void> => {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400).json({ message: 'Invalid request ID format.' });
+      return;
+    }
+    try {
+      const existingRequest = await BloodRequest.findById(id);
+      if (!existingRequest) {
+        res.status(404).json({ message: 'Blood request not found.' });
+        return;
+      }
+      if (existingRequest.requesterId.toString() !== req.user!._id.toString()) {
+        res.status(403).json({ message: 'You do not have permission to edit this request.' });
+        return;
+      }
+      if (existingRequest.status !== 'pending_verification') {
+        res.status(409).json({
+          message: 'This request is no longer editable as it has already been processed by the hospital.',
+        });
+        return;
+      }
+      (req as any).existingBloodRequest = existingRequest;
+      next();
+    } catch (error) {
+      console.error('[requests] Error verifying edit eligibility:', error);
+      res.status(500).json({ message: 'An error occurred while verifying request eligibility.' });
+    }
+  },
+  (req: AuthenticatedRequest, res: Response, next) => {
+    documentUpload.single('document')(req, res, (err) => {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            res.status(400).json({
+              message: `File is too large. Maximum allowed size is ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB.`,
+            });
+            return;
+          }
+          res.status(400).json({ message: `Upload error: ${err.message}` });
+          return;
+        }
+        res.status(400).json({ message: err.message || 'Error uploading document' });
+        return;
+      }
+      next();
+    });
+  },
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const uploadedFile = req.file;
+    const existingRequest = (req as any).existingBloodRequest as BloodRequestDocument;
+
+    try {
+      // 2. Validate replacement file if provided
+      let newDocumentMeta: RequestDocumentMetadata | null = null;
+      if (uploadedFile) {
+        const isSignatureValid = await validateFileSignature(uploadedFile.path);
+        if (!isSignatureValid) {
+          removeUploadedFile(uploadedFile.path);
+          res.status(400).json({
+            message:
+              'Invalid file content. The uploaded document does not match a valid PDF, JPEG, or PNG format.',
+          });
+          return;
+        }
+
+        newDocumentMeta = {
+          originalName: uploadedFile.originalname,
+          mimeType: uploadedFile.mimetype,
+          sizeBytes: uploadedFile.size,
+          storageKey: uploadedFile.filename,
+        };
+      }
+
+      // 3. Validate form fields with Zod
+      const parseResult = createBloodRequestSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        if (uploadedFile) removeUploadedFile(uploadedFile.path);
+        const firstError = parseResult.error.issues[0]?.message || 'Invalid form data';
+        res.status(400).json({
+          message: firstError,
+          errors: parseResult.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const validatedData = parseResult.data;
+      const hospital = getHospitalById(validatedData.hospitalId);
+      if (!hospital) {
+        if (uploadedFile) removeUploadedFile(uploadedFile.path);
+        res.status(400).json({ message: 'Selected hospital could not be identified.' });
+        return;
+      }
+
+      // 4. Atomic conditional update enforcing ownership and pending status
+      const previousStorageKey = existingRequest.document?.storageKey;
+      const updateFields: Record<string, unknown> = {
+        patientName: validatedData.patientName,
+        bloodGroup: validatedData.bloodGroup,
+        unitsRequired: validatedData.unitsRequired,
+        hospitalId: hospital.id,
+        hospitalName: hospital.name,
+        hospitalReferenceAndWard: validatedData.hospitalReferenceAndWard,
+        urgency: validatedData.urgency,
+      };
+
+      if (newDocumentMeta) {
+        updateFields.document = newDocumentMeta;
+      }
+
+      const updatedRequest = await BloodRequest.findOneAndUpdate(
+        {
+          _id: existingRequest._id,
+          requesterId: req.user!._id,
+          status: 'pending_verification',
+        },
+        { $set: updateFields },
+        { returnDocument: 'after', runValidators: true },
+      );
+
+      if (!updatedRequest) {
+        if (uploadedFile) removeUploadedFile(uploadedFile.path);
+        res.status(409).json({
+          message: 'This request is no longer editable as it has already been processed by the hospital.',
+        });
+        return;
+      }
+
+      // 5. Clean up old document file only AFTER successful update
+      if (newDocumentMeta && previousStorageKey) {
+        try {
+          const oldFilePath = path.join(UPLOAD_DIR, previousStorageKey);
+          removeUploadedFile(oldFilePath);
+        } catch (cleanupErr) {
+          console.warn('[requests] Warning: could not delete previous document file:', cleanupErr);
+        }
+      }
+
+      res.status(200).json({
+        message: 'Blood request updated successfully.',
+        request: serializeRequest(updatedRequest),
+      });
+    } catch (error) {
+      if (uploadedFile) removeUploadedFile(uploadedFile.path);
+      console.error('[requests] Error updating request:', error);
+      res.status(500).json({
+        message: 'An error occurred while updating the blood request. Please try again.',
+      });
     }
   },
 );

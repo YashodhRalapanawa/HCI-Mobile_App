@@ -12,7 +12,7 @@ import type { MyRequestSummaryItem, RequestStatus } from '../types';
 interface RequestCardProps {
   item: MyRequestSummaryItem;
   onPressDetails: (item: MyRequestSummaryItem) => void;
-  onPressViewDonor?: (item: MyRequestSummaryItem) => void;
+  onPressEdit?: (item: MyRequestSummaryItem) => void;
 }
 
 interface StatusVisualConfig {
@@ -25,20 +25,7 @@ interface StatusVisualConfig {
   actionText: string;
 }
 
-function getStatusConfig(status: RequestStatus, acceptedDonorsCount?: number): StatusVisualConfig {
-  if (acceptedDonorsCount && acceptedDonorsCount > 0) {
-    const isSingle = acceptedDonorsCount === 1;
-    return {
-      label: isSingle ? '1 Donor Accepted' : `${acceptedDonorsCount} Donors Accepted`,
-      supportingText: 'A donor has responded to this blood request. Tap below to view donor response details.',
-      badgeBg: '#DCFCE7',
-      badgeTextColor: '#166534',
-      badgeBorderColor: '#86EFAC',
-      iconName: 'checkmark-circle',
-      actionText: 'VIEW DONOR',
-    };
-  }
-
+function getStatusConfig(status: RequestStatus): StatusVisualConfig {
   switch (status) {
     case 'pending_verification':
       return {
@@ -94,10 +81,10 @@ function getStatusConfig(status: RequestStatus, acceptedDonorsCount?: number): S
   }
 }
 
-export function RequestCard({ item, onPressDetails, onPressViewDonor }: RequestCardProps) {
+export function RequestCard({ item, onPressDetails, onPressEdit }: RequestCardProps) {
   const [copied, setCopied] = useState(false);
-  const hasAcceptedDonors = Boolean(item.acceptedDonorsCount && item.acceptedDonorsCount > 0);
-  const statusConfig = getStatusConfig(item.status, item.acceptedDonorsCount);
+  const statusConfig = getStatusConfig(item.status);
+  const isPending = item.status === 'pending_verification';
 
   const handleCopyReference = async () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -190,29 +177,29 @@ export function RequestCard({ item, onPressDetails, onPressViewDonor }: RequestC
         <Text style={styles.supportingText}>{statusConfig.supportingText}</Text>
       </View>
 
-      {/* Contextual Action Button */}
-      {hasAcceptedDonors && onPressViewDonor ? (
+      {/* Action Buttons: Pending requests have both Edit and Details */}
+      {isPending && onPressEdit ? (
         <View style={styles.actionRowWithBoth}>
           <TouchableOpacity
-            style={styles.viewDonorBtn}
-            onPress={() => onPressViewDonor(item)}
-            activeOpacity={0.85}
+            style={styles.editBtn}
+            onPress={() => onPressEdit(item)}
+            activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel={`VIEW DONOR for request ${item.id}`}
+            accessibilityLabel={`Edit request ${item.id}`}
           >
-            <Ionicons name="person-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 5 }} />
-            <Text style={styles.viewDonorBtnText}>VIEW DONOR</Text>
+            <Ionicons name="pencil" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+            <Text style={styles.editBtnText}>Edit</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.secondaryDetailsBtn}
+            style={styles.actionBtn}
             onPress={() => onPressDetails(item)}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel={`View request details for ${item.id}`}
+            accessibilityLabel={`${statusConfig.actionText} for request ${item.id}`}
           >
-            <Text style={styles.secondaryDetailsBtnText}>Details</Text>
-            <Ionicons name="chevron-forward" size={13} color={colors.primary} />
+            <Text style={styles.actionBtnText}>{statusConfig.actionText}</Text>
+            <Ionicons name="chevron-forward" size={15} color={colors.primary} />
           </TouchableOpacity>
         </View>
       ) : (
@@ -384,39 +371,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 4,
   },
-  viewDonorBtn: {
+  editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DC2626',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    backgroundColor: '#2563EB',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: borderRadius.sm,
-    shadowColor: '#DC2626',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.15,
-    shadowRadius: 3,
+    shadowRadius: 2,
     elevation: 2,
   },
-  viewDonorBtnText: {
+  editBtnText: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.4,
-  },
-  secondaryDetailsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: borderRadius.sm,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  secondaryDetailsBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    marginRight: 2,
+    letterSpacing: 0.2,
   },
 });
