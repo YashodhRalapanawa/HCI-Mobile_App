@@ -736,6 +736,10 @@ requestRouter.get(
           deliveryPersonName: bloodRequest.deliveryAssignment.deliveryPersonName,
           contactPhone: bloodRequest.deliveryAssignment.contactPhone,
           assignedAt: bloodRequest.deliveryAssignment.assignedAt.toISOString(),
+          arrivalConfirmedAt: bloodRequest.deliveryAssignment.arrivalConfirmedAt
+            ? bloodRequest.deliveryAssignment.arrivalConfirmedAt.toISOString()
+            : null,
+          isArrivalConfirmed: Boolean(bloodRequest.deliveryAssignment.arrivalConfirmedAt),
         },
         hospitalName: bloodRequest.hospitalName,
         hospitalReferenceAndWard: bloodRequest.hospitalReferenceAndWard,
@@ -744,6 +748,136 @@ requestRouter.get(
       console.error('[requests] Error fetching delivery assignment:', error);
       res.status(500).json({
         message: 'An error occurred while fetching delivery assignment details.',
+      });
+    }
+  },
+);
+
+/**
+ * POST /api/requests/:id/delivery-assignment/confirm-arrival
+ * Confirms that the assigned hospital/blood bank delivery person physically arrived.
+ * - Enforces owner authorization.
+ * - Matches the specified assignmentId atomically.
+ * - Only verified or in_progress requests are eligible.
+ * - Idempotent: repeated confirmation of the same assignment returns the original confirmation.
+ * - Does not change request lifecycle status or unitsFulfilled.
+ */
+requestRouter.post(
+  '/:id/delivery-assignment/confirm-arrival',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.isValidObjectId(id)) {
+        res.status(400).json({ message: 'Invalid request ID format.' });
+        return;
+      }
+
+      const { assignmentId } = req.body || {};
+      if (typeof assignmentId !== 'string' || !assignmentId.trim()) {
+        res.status(400).json({ message: 'A valid assignmentId is required to confirm arrival.' });
+        return;
+      }
+
+      const trimmedAssignmentId = assignmentId.trim();
+      const now = new Date();
+
+      // 1. Atomic conditional update enforcing ownership, status eligibility, matching assignmentId, and unconfirmed state
+      const updated = await BloodRequest.findOneAndUpdate(
+        {
+          _id: id,
+          requesterId: req.user!._id,
+          status: { $in: ['verified', 'in_progress'] },
+          'deliveryAssignment.assignmentId': trimmedAssignmentId,
+          'deliveryAssignment.arrivalConfirmedAt': { $in: [null, undefined] },
+        },
+        {
+          $set: {
+            'deliveryAssignment.arrivalConfirmedAt': now,
+            'deliveryAssignment.arrivalConfirmedBy': req.user!._id,
+          },
+        },
+        { returnDocument: 'after' as const },
+      );
+
+      if (updated && updated.deliveryAssignment) {
+        res.status(200).json({
+          message: 'Delivery person arrival confirmed successfully.',
+          requestId: updated._id.toString(),
+          assignmentId: updated.deliveryAssignment.assignmentId,
+          arrivalConfirmedAt: updated.deliveryAssignment.arrivalConfirmedAt!.toISOString(),
+          isArrivalConfirmed: true,
+          status: updated.status,
+          deliveryAssignment: {
+            assignmentId: updated.deliveryAssignment.assignmentId,
+            deliveryPersonName: updated.deliveryAssignment.deliveryPersonName,
+            contactPhone: updated.deliveryAssignment.contactPhone,
+            assignedAt: updated.deliveryAssignment.assignedAt.toISOString(),
+            arrivalConfirmedAt: updated.deliveryAssignment.arrivalConfirmedAt!.toISOString(),
+            isArrivalConfirmed: true,
+          },
+        });
+        return;
+      }
+
+      // 2. Conditional update failed - inspect current state for precise idempotent or error handling
+      const currentRequest = await BloodRequest.findById(id);
+      if (!currentRequest) {
+        res.status(404).json({ message: 'Blood request not found.' });
+        return;
+      }
+
+      if (currentRequest.requesterId.toString() !== req.user!._id.toString()) {
+        res.status(403).json({
+          message: 'You do not have permission to confirm arrival for this request.',
+        });
+        return;
+      }
+
+      if (!currentRequest.deliveryAssignment) {
+        res.status(409).json({
+          message: 'No delivery assignment is recorded for this request.',
+        });
+        return;
+      }
+
+      if (currentRequest.deliveryAssignment.assignmentId !== trimmedAssignmentId) {
+        res.status(409).json({
+          message: 'The delivery assignment has changed. Please refresh the page.',
+        });
+        return;
+      }
+
+      // If matching assignment already has arrival confirmed, return existing confirmation idempotently
+      if (currentRequest.deliveryAssignment.arrivalConfirmedAt) {
+        res.status(200).json({
+          message: 'Delivery person arrival was already confirmed.',
+          requestId: currentRequest._id.toString(),
+          assignmentId: currentRequest.deliveryAssignment.assignmentId,
+          arrivalConfirmedAt: currentRequest.deliveryAssignment.arrivalConfirmedAt.toISOString(),
+          isArrivalConfirmed: true,
+          status: currentRequest.status,
+          deliveryAssignment: {
+            assignmentId: currentRequest.deliveryAssignment.assignmentId,
+            deliveryPersonName: currentRequest.deliveryAssignment.deliveryPersonName,
+            contactPhone: currentRequest.deliveryAssignment.contactPhone,
+            assignedAt: currentRequest.deliveryAssignment.assignedAt.toISOString(),
+            arrivalConfirmedAt: currentRequest.deliveryAssignment.arrivalConfirmedAt.toISOString(),
+            isArrivalConfirmed: true,
+          },
+        });
+        return;
+      }
+
+      // Request status is ineligible (e.g. pending_verification, fulfilled, cancelled)
+      res.status(409).json({
+        message: `Arrival cannot be confirmed because this request is currently ${currentRequest.status}.`,
+      });
+    } catch (error) {
+      console.error('[requests] Error confirming delivery arrival:', error);
+      res.status(500).json({
+        message: 'An error occurred while confirming delivery arrival. Please try again.',
       });
     }
   },

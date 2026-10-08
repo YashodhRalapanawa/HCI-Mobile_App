@@ -22,6 +22,8 @@ export interface DeliveryAssignment {
   deliveryPersonName: string;
   contactPhone: string;
   assignedAt: Date;
+  arrivalConfirmedAt?: Date | null;
+  arrivalConfirmedBy?: Types.ObjectId | null;
 }
 
 export interface BloodRequestDocument extends Document {
@@ -47,6 +49,8 @@ const deliveryAssignmentSchema = new Schema<DeliveryAssignment>(
     deliveryPersonName: { type: String, required: true, trim: true },
     contactPhone: { type: String, required: true, trim: true },
     assignedAt: { type: Date, required: true, default: Date.now },
+    arrivalConfirmedAt: { type: Date, default: null },
+    arrivalConfirmedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { _id: false },
 );

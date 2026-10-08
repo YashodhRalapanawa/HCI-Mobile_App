@@ -7,6 +7,7 @@ import type {
   MyRequestsResponse,
   RequestAcceptancesResponse,
   RequestDeliveryAssignmentResponse,
+  ConfirmDeliveryArrivalResponse,
 } from '../types';
 
 export const requestApi = {
@@ -195,6 +196,24 @@ export const requestApi = {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+      },
+    );
+  },
+
+  confirmDeliveryArrival: async (
+    token: string,
+    requestId: string,
+    assignmentId: string,
+  ): Promise<ConfirmDeliveryArrivalResponse> => {
+    return apiRequest<ConfirmDeliveryArrivalResponse>(
+      `requests/${encodeURIComponent(requestId)}/delivery-assignment/confirm-arrival`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ assignmentId }),
       },
     );
   },

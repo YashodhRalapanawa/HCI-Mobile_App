@@ -59,6 +59,8 @@ export interface DeliveryAssignmentInfo {
   deliveryPersonName: string;
   contactPhone: string;
   assignedAt: string;
+  arrivalConfirmedAt?: string | null;
+  isArrivalConfirmed?: boolean;
 }
 
 export interface RequestDeliveryAssignmentResponse {
@@ -70,6 +72,16 @@ export interface RequestDeliveryAssignmentResponse {
   hospitalName?: string;
   hospitalReferenceAndWard?: string;
   message?: string;
+}
+
+export interface ConfirmDeliveryArrivalResponse {
+  message: string;
+  requestId: string;
+  assignmentId: string;
+  arrivalConfirmedAt: string;
+  isArrivalConfirmed: boolean;
+  status: RequestStatus;
+  deliveryAssignment: DeliveryAssignmentInfo;
 }
 
 export interface MyRequestSummaryItem {

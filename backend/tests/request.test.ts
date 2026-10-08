@@ -1496,6 +1496,252 @@ test('HTTP Request Routes Integration', async (t) => {
               assert.equal(postDoc.status, initialStatus);
             });
           });
+
+          // 15. Member 2.6 Delivery Arrival Confirmation Verification
+          await subT.test('Member 2.6 Delivery Arrival Confirmation Verification', async (arrivalT) => {
+            assert.ok(createdRequestId);
+            assert.ok(createdUserId);
+            assert.ok(secondUserId);
+            const reqId = createdRequestId;
+            const ownerToken = realJwtToken;
+            const nonOwnerToken = secondUserToken;
+            const testAssignmentId = 'ASG-ARR-201';
+
+            // Ensure baseline request state: verified with active deliveryAssignment and 0 unitsFulfilled
+            await BloodRequest.findByIdAndUpdate(reqId, {
+              status: 'verified',
+              unitsFulfilled: 0,
+              deliveryAssignment: {
+                assignmentId: testAssignmentId,
+                deliveryPersonName: 'Sunil Courier',
+                contactPhone: '+94 77 123 4567',
+                assignedAt: new Date(),
+              },
+            });
+
+            // 15.1 Reject unauthenticated and non-owner requests
+            await arrivalT.test('rejects unauthenticated and non-owner arrival confirmation', async () => {
+              // Unauthenticated
+              const unauthRes = await fetch(
+                `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment/confirm-arrival`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ assignmentId: testAssignmentId }),
+                },
+              );
+              assert.equal(unauthRes.status, 401);
+
+              // Non-owner
+              const nonOwnerRes = await fetch(
+                `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment/confirm-arrival`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${nonOwnerToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ assignmentId: testAssignmentId }),
+                },
+              );
+              assert.equal(nonOwnerRes.status, 403);
+              const nonOwnerBody = (await nonOwnerRes.json()) as { message: string };
+              assert.match(nonOwnerBody.message, /permission/i);
+            });
+
+            // 15.2 Reject missing or mismatched assignmentId
+            await arrivalT.test('rejects missing and mismatched assignmentId', async () => {
+              // Missing assignmentId
+              const missingRes = await fetch(
+                `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment/confirm-arrival`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${ownerToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({}),
+                },
+              );
+              assert.equal(missingRes.status, 400);
+
+              // Mismatched assignmentId
+              const mismatchRes = await fetch(
+                `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment/confirm-arrival`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${ownerToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ assignmentId: 'WRONG-ID-999' }),
+                },
+              );
+              assert.equal(mismatchRes.status, 409);
+              const mismatchBody = (await mismatchRes.json()) as { message: string };
+              assert.match(mismatchBody.message, /assignment has changed/i);
+            });
+
+            // 15.3 Reject ineligible statuses (pending_verification, cancelled, fulfilled)
+            await arrivalT.test('rejects unconfirmed arrival for ineligible request statuses', async () => {
+              const ineligibleStatuses: Array<'pending_verification' | 'cancelled' | 'fulfilled'> = [
+                'pending_verification',
+                'cancelled',
+                'fulfilled',
+              ];
+
+              for (const badStatus of ineligibleStatuses) {
+                await BloodRequest.findByIdAndUpdate(reqId, { status: badStatus });
+                const res = await fetch(
+                  `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment/confirm-arrival`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${ownerToken}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ assignmentId: testAssignmentId }),
+                  },
+                );
+                assert.equal(res.status, 409);
+                const body = (await res.json()) as { message: string };
+                assert.match(body.message, /cannot be confirmed/i);
+              }
+
+              // Restore to 'verified'
+              await BloodRequest.findByIdAndUpdate(reqId, { status: 'verified' });
+            });
+
+            // 15.4 Owner confirms current eligible assignment successfully
+            let firstConfirmedAt: string = '';
+            await arrivalT.test('owner confirms arrival; derives server timestamp and preserves request status & unitsFulfilled', async () => {
+              const res = await fetch(
+                `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment/confirm-arrival`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${ownerToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    assignmentId: testAssignmentId,
+                    // Attempting to spoof identity or timestamp from client must be ignored
+                    arrivalConfirmedAt: '1999-01-01T00:00:00.000Z',
+                    arrivalConfirmedBy: secondUserId,
+                  }),
+                },
+              );
+              assert.equal(res.status, 200);
+              const body = (await res.json()) as {
+                message: string;
+                assignmentId: string;
+                arrivalConfirmedAt: string;
+                isArrivalConfirmed: boolean;
+                status: string;
+              };
+
+              assert.equal(body.isArrivalConfirmed, true);
+              assert.equal(body.assignmentId, testAssignmentId);
+              assert.equal(body.status, 'verified');
+              assert.ok(body.arrivalConfirmedAt);
+              assert.notEqual(body.arrivalConfirmedAt, '1999-01-01T00:00:00.000Z');
+              firstConfirmedAt = body.arrivalConfirmedAt;
+
+              // Inspect DB record: server-derived arrivalConfirmedBy equals owner, status unchanged, unitsFulfilled unchanged
+              const doc = await BloodRequest.findById(reqId);
+              assert.ok(doc?.deliveryAssignment?.arrivalConfirmedAt);
+              assert.equal(doc?.deliveryAssignment?.arrivalConfirmedBy?.toString(), createdUserId);
+              assert.equal(doc?.status, 'verified');
+              assert.equal(doc?.unitsFulfilled, 0);
+            });
+
+            // 15.5 Saved confirmation is returned by protected read endpoint
+            await arrivalT.test('protected read endpoint returns saved arrival confirmation', async () => {
+              const readRes = await fetch(
+                `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment`,
+                {
+                  headers: { Authorization: `Bearer ${ownerToken}` },
+                },
+              );
+              assert.equal(readRes.status, 200);
+              const readBody = (await readRes.json()) as {
+                deliveryAssignment: {
+                  assignmentId: string;
+                  isArrivalConfirmed: boolean;
+                  arrivalConfirmedAt: string;
+                };
+              };
+              assert.ok(readBody.deliveryAssignment);
+              assert.equal(readBody.deliveryAssignment.isArrivalConfirmed, true);
+              assert.equal(readBody.deliveryAssignment.assignmentId, testAssignmentId);
+              assert.equal(readBody.deliveryAssignment.arrivalConfirmedAt, firstConfirmedAt);
+            });
+
+            // 15.6 Repeated confirmation is idempotent and preserves original timestamp
+            await arrivalT.test('repeated confirmation returns original saved confirmation idempotently', async () => {
+              const repeatRes = await fetch(
+                `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment/confirm-arrival`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${ownerToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ assignmentId: testAssignmentId }),
+                },
+              );
+              assert.equal(repeatRes.status, 200);
+              const repeatBody = (await repeatRes.json()) as {
+                arrivalConfirmedAt: string;
+                isArrivalConfirmed: boolean;
+              };
+              assert.equal(repeatBody.isArrivalConfirmed, true);
+              assert.equal(repeatBody.arrivalConfirmedAt, firstConfirmedAt);
+            });
+
+            // 15.7 Stale assignment cannot be confirmed after courier reassignment
+            await arrivalT.test('stale assignment cannot be confirmed after reassignment generates new assignmentId', async () => {
+              // Simulate admin reassigning to a new courier with a new assignmentId
+              const newAssignmentId = 'ASG-ARR-999';
+              await BloodRequest.findByIdAndUpdate(reqId, {
+                deliveryAssignment: {
+                  assignmentId: newAssignmentId,
+                  deliveryPersonName: 'Kamal New Courier',
+                  contactPhone: '+94 77 987 6543',
+                  assignedAt: new Date(),
+                  arrivalConfirmedAt: null,
+                  arrivalConfirmedBy: null,
+                },
+              });
+
+              // Client attempting to confirm using stale assignmentId receives 409
+              const staleRes = await fetch(
+                `http://127.0.0.1:${port}/api/requests/${reqId}/delivery-assignment/confirm-arrival`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${ownerToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ assignmentId: testAssignmentId }),
+                },
+              );
+              assert.equal(staleRes.status, 409);
+              const staleBody = (await staleRes.json()) as { message: string };
+              assert.match(staleBody.message, /assignment has changed/i);
+
+              // DB new assignment remains unconfirmed
+              const doc = await BloodRequest.findById(reqId);
+              assert.equal(doc?.deliveryAssignment?.assignmentId, newAssignmentId);
+              assert.equal(doc?.deliveryAssignment?.arrivalConfirmedAt, null);
+            });
+
+            // Clean up assignment
+            await BloodRequest.findByIdAndUpdate(reqId, {
+              status: 'pending_verification',
+              $unset: { deliveryAssignment: 1 },
+            });
+          });
         } finally {
           for (const reqId of extraReqIds) {
             await BloodRequest.findByIdAndDelete(reqId);

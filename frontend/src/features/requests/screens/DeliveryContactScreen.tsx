@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -16,7 +17,7 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 import { BottomNavBar } from '@/components/BottomNavBar';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { requestApi } from '../services/requestApi';
-import type { DeliveryAssignmentInfo } from '../types';
+import type { DeliveryAssignmentInfo, RequestStatus } from '../types';
 import {
   copyPhoneNumber,
   openPhoneDialer,
@@ -24,9 +25,26 @@ import {
   sanitizePhoneNumber,
 } from '@/utils/phone';
 
+function formatConfirmationTimestamp(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return isoString;
+  }
+}
+
 export function DeliveryContactScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, dialog } = useLocalSearchParams<{ id: string; dialog?: string }>();
   const { token } = useAuth();
 
   const isPreview = id === 'preview' || id === 'sample-preview';
@@ -37,6 +55,7 @@ export function DeliveryContactScreen() {
   const [hospitalWard, setHospitalWard] = useState<string>('');
   const [requestId, setRequestId] = useState<string>('');
   const [bloodGroup, setBloodGroup] = useState<string>('');
+  const [requestStatus, setRequestStatus] = useState<RequestStatus | null>(null);
 
   // States
   const [loading, setLoading] = useState(!isPreview);
@@ -48,6 +67,17 @@ export function DeliveryContactScreen() {
   const [copiedRef, setCopiedRef] = useState(false);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Member 2.6 Arrival Confirmation States
+  const [modalOpenOverride, setModalOpenOverride] = useState<boolean | null>(null);
+  const confirmModalVisible =
+    modalOpenOverride !== null ? modalOpenOverride : dialog === 'confirm_arrival';
+  const setConfirmModalVisible = useCallback((visible: boolean) => {
+    setModalOpenOverride(visible);
+  }, []);
+  const [isConfirmingArrival, setIsConfirmingArrival] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [localConfirmedAt, setLocalConfirmedAt] = useState<string | null>(null);
 
   const fetchSeqRef = useRef(0);
 
@@ -72,6 +102,9 @@ export function DeliveryContactScreen() {
 
     if (!isRealSession || !token) {
       setAssignment(null);
+      setLocalConfirmedAt(null);
+      setRequestStatus(null);
+      setConfirmModalVisible(false);
       setLoading(false);
       setErrorType('unauthenticated');
       setErrorMessage('Please sign in to view delivery contact details.');
@@ -80,6 +113,9 @@ export function DeliveryContactScreen() {
 
     if (!id || id === 'undefined') {
       setAssignment(null);
+      setLocalConfirmedAt(null);
+      setRequestStatus(null);
+      setConfirmModalVisible(false);
       setLoading(false);
       setErrorType('not_found');
       setErrorMessage('Blood request reference is missing.');
@@ -95,8 +131,11 @@ export function DeliveryContactScreen() {
 
       if (currentSeq !== fetchSeqRef.current) return;
 
+      setRequestStatus(response.status || null);
+
       if (!response.deliveryAssignment) {
         setAssignment(null);
+        setLocalConfirmedAt(null);
         setErrorType('unassigned');
         setErrorMessage(
           response.message || 'Awaiting delivery staff assignment from the hospital blood bank.',
@@ -107,6 +146,9 @@ export function DeliveryContactScreen() {
         setBloodGroup(response.bloodGroup || '');
       } else {
         setAssignment(response.deliveryAssignment);
+        if (response.deliveryAssignment.arrivalConfirmedAt) {
+          setLocalConfirmedAt(response.deliveryAssignment.arrivalConfirmedAt);
+        }
         setHospitalName(response.hospitalName || '');
         setHospitalWard(response.hospitalReferenceAndWard || '');
         setRequestId(response.requestId || id);
@@ -139,7 +181,7 @@ export function DeliveryContactScreen() {
         setLoading(false);
       }
     }
-  }, [id, isPreview, token]);
+  }, [id, isPreview, token, setConfirmModalVisible]);
 
   useFocusEffect(
     useCallback(() => {
@@ -231,6 +273,83 @@ export function DeliveryContactScreen() {
 
     if (!res.success) {
       setActionError(res.error || 'Could not launch SMS app.');
+    }
+  };
+
+  const handleCloseConfirmModal = () => {
+    if (isConfirmingArrival) return;
+    setConfirmError(null);
+    setConfirmModalVisible(false);
+  };
+
+  const handleConfirmArrival = async () => {
+    setConfirmError(null);
+
+    // Dev preview mode: simulate locally without server calls
+    if (isPreview) {
+      setIsConfirmingArrival(true);
+      setTimeout(() => {
+        const simulatedTime = new Date().toISOString();
+        setLocalConfirmedAt(simulatedTime);
+        setIsConfirmingArrival(false);
+        setConfirmModalVisible(false);
+        setFeedbackNotice('Arrival confirmed (preview mode — simulated locally).');
+        setTimeout(() => setFeedbackNotice(null), 4000);
+      }, 450);
+      return;
+    }
+
+    const currentAssignmentId = assignment?.assignmentId;
+    if (!currentAssignmentId) {
+      setConfirmError('No active delivery assignment found.');
+      return;
+    }
+
+    if (!token) {
+      setErrorType('unauthenticated');
+      setErrorMessage('Please sign in to confirm delivery arrival.');
+      setConfirmModalVisible(false);
+      return;
+    }
+
+    setIsConfirmingArrival(true);
+
+    try {
+      const response = await requestApi.confirmDeliveryArrival(token, id, currentAssignmentId);
+      const confirmedAt = response.arrivalConfirmedAt || new Date().toISOString();
+      setLocalConfirmedAt(confirmedAt);
+      if (response.deliveryAssignment) {
+        setAssignment(response.deliveryAssignment);
+      }
+      setConfirmModalVisible(false);
+      setFeedbackNotice('Delivery arrival confirmed successfully.');
+      setTimeout(() => setFeedbackNotice(null), 4000);
+    } catch (err: any) {
+      const status = err?.status;
+      const msg = err?.message || 'Failed to confirm arrival.';
+
+      if (status === 409) {
+        // Handle conflict gracefully
+        if (msg.toLowerCase().includes('already confirmed')) {
+          await loadDeliveryAssignment();
+          setConfirmModalVisible(false);
+          setFeedbackNotice('Arrival was already confirmed.');
+          setTimeout(() => setFeedbackNotice(null), 4000);
+          return;
+        }
+        // Reassigned or ineligible: refresh current details so stale assignment is cleared
+        await loadDeliveryAssignment();
+        setConfirmError(msg);
+      } else if (status === 401) {
+        setErrorType('unauthenticated');
+        setErrorMessage('Your session has expired. Please sign in again.');
+        setConfirmModalVisible(false);
+      } else {
+        // Network or server error: allow retry using same assignmentId
+        setConfirmError(msg);
+      }
+    } finally {
+      setIsConfirmingArrival(false);
     }
   };
 
@@ -326,6 +445,15 @@ export function DeliveryContactScreen() {
         </View>
       );
     }
+
+    const isArrivalConfirmed = Boolean(
+      localConfirmedAt || assignment?.arrivalConfirmedAt || assignment?.isArrivalConfirmed,
+    );
+    const confirmedTimestamp = localConfirmedAt || assignment?.arrivalConfirmedAt;
+    const isEligibleForConfirmation =
+      isPreview ||
+      ((requestStatus === 'verified' || requestStatus === 'in_progress') &&
+        Boolean(assignment?.assignmentId));
 
     return (
       <View style={styles.contentContainer}>
@@ -473,6 +601,47 @@ export function DeliveryContactScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Member 2.6 Arrival Confirmation Section */}
+        {isArrivalConfirmed ? (
+          <View style={styles.arrivalConfirmedCard} accessible={true}>
+            <View style={styles.arrivalConfirmedHeader}>
+              <View style={styles.arrivalConfirmedIconCircle}>
+                <Ionicons name="checkmark-done" size={20} color="#166534" />
+              </View>
+              <View style={styles.arrivalConfirmedTextCol}>
+                <Text style={styles.arrivalConfirmedTitle}>Arrival confirmed</Text>
+                <Text style={styles.arrivalConfirmedTimestamp}>
+                  {confirmedTimestamp
+                    ? `Confirmed ${formatConfirmationTimestamp(confirmedTimestamp)}`
+                    : 'Confirmed by requester'}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.arrivalConfirmedNote}>
+              Physical arrival of the delivery person has been recorded. Blood unit inspection and hospital handoff remain pending.
+            </Text>
+          </View>
+        ) : isEligibleForConfirmation ? (
+          <View style={styles.confirmArrivalContainer}>
+            <TouchableOpacity
+              style={styles.confirmArrivalBtn}
+              onPress={() => {
+                setConfirmError(null);
+                setConfirmModalVisible(true);
+              }}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Confirm arrival of delivery person"
+            >
+              <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.confirmArrivalBtnText}>CONFIRM ARRIVAL</Text>
+            </TouchableOpacity>
+            <Text style={styles.confirmArrivalSubtext}>
+              Confirm once the assigned delivery person has physically arrived with you.
+            </Text>
+          </View>
+        ) : null}
+
         {/* Short Guidance Note */}
         <View style={styles.guidanceBox}>
           <Ionicons name="information-circle-outline" size={16} color="#64748B" style={styles.guidanceIcon} />
@@ -503,7 +672,7 @@ export function DeliveryContactScreen() {
 
         {__DEV__ && (
           <View style={styles.devSwitcherWrapper}>
-            <ScreenSwitcher currentScreenId={23} />
+            <ScreenSwitcher currentScreenId={dialog === 'confirm_arrival' || confirmModalVisible ? 24 : 23} />
           </View>
         )}
       </View>
@@ -514,6 +683,103 @@ export function DeliveryContactScreen() {
       >
         {renderContent()}
       </ScrollView>
+
+      {/* Member 2.6 Accessible Arrival Confirmation Dialog */}
+      <Modal
+        visible={confirmModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseConfirmModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard} accessible={true} accessibilityViewIsModal={true}>
+            {/* Top Close Control */}
+            <TouchableOpacity
+              style={styles.modalCloseIconBtn}
+              onPress={handleCloseConfirmModal}
+              disabled={isConfirmingArrival}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Close confirmation dialog"
+            >
+              <Ionicons name="close" size={20} color="#64748B" />
+            </TouchableOpacity>
+
+            <View style={styles.modalHeaderIcon}>
+              <Ionicons name="location" size={26} color="#16A34A" />
+            </View>
+
+            <Text style={styles.modalTitle}>Confirm delivery person’s arrival?</Text>
+
+            {/* Courier Context */}
+            <View style={styles.modalContextBox}>
+              <View style={styles.modalContextRow}>
+                <Ionicons name="person" size={14} color="#475569" style={{ marginRight: 6 }} />
+                <Text style={styles.modalContextName} numberOfLines={1}>
+                  {displayPersonName}
+                </Text>
+              </View>
+              <View style={styles.modalContextRow}>
+                <Ionicons name="business" size={14} color="#64748B" style={{ marginRight: 6 }} />
+                <Text style={styles.modalContextHospital} numberOfLines={1}>
+                  {displayHospital}
+                  {displayWard ? ` · ${displayWard}` : ''}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.modalExplanation}>
+              Confirm only if the assigned delivery person has arrived. This does not mark your blood request as completed.
+            </Text>
+
+            {/* In-Dialog Error Alert if Submission Fails */}
+            {confirmError && (
+              <View style={styles.modalErrorBanner} accessible={true} accessibilityRole="alert">
+                <Ionicons name="alert-circle" size={16} color="#B91C1C" style={{ marginRight: 6 }} />
+                <Text style={styles.modalErrorBannerText}>{confirmError}</Text>
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalSecondaryBtn}
+                onPress={handleCloseConfirmModal}
+                disabled={isConfirmingArrival}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Not yet"
+              >
+                <Text style={styles.modalSecondaryBtnText}>Not yet</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalPrimaryBtn,
+                  isConfirmingArrival && styles.modalPrimaryBtnDisabled,
+                ]}
+                onPress={handleConfirmArrival}
+                disabled={isConfirmingArrival}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Confirm arrival"
+              >
+                {isConfirmingArrival ? (
+                  <>
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalPrimaryBtnText}>Confirming...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalPrimaryBtnText}>Confirm arrival</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Shared Bottom Navigation Bar */}
       <BottomNavBar activeTab="home" />
@@ -910,5 +1176,218 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 14,
     fontWeight: '700',
+  },
+  arrivalConfirmedCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#BBF7D0',
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  arrivalConfirmedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  arrivalConfirmedIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  arrivalConfirmedTextCol: {
+    flex: 1,
+  },
+  arrivalConfirmedTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  arrivalConfirmedTimestamp: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#15803D',
+    marginTop: 2,
+  },
+  arrivalConfirmedNote: {
+    fontSize: 12,
+    color: '#166534',
+    lineHeight: 18,
+    opacity: 0.9,
+  },
+  confirmArrivalContainer: {
+    width: '100%',
+    marginBottom: spacing.md,
+  },
+  confirmArrivalBtn: {
+    width: '100%',
+    backgroundColor: '#0F172A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  confirmArrivalBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
+  },
+  confirmArrivalSubtext: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    position: 'relative',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  modalCloseIconBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  modalHeaderIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1.5,
+    borderColor: '#BBF7D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  modalContextBox: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginBottom: 12,
+    gap: 6,
+  },
+  modalContextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalContextName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+    flex: 1,
+  },
+  modalContextHospital: {
+    fontSize: 12,
+    color: '#64748B',
+    flex: 1,
+  },
+  modalExplanation: {
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 14,
+  },
+  modalErrorBanner: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+  },
+  modalErrorBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#B91C1C',
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 10,
+    marginTop: 4,
+  },
+  modalSecondaryBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSecondaryBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  modalPrimaryBtn: {
+    flex: 1.3,
+    height: 44,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#16A34A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalPrimaryBtnDisabled: {
+    opacity: 0.7,
+  },
+  modalPrimaryBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
