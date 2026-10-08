@@ -1,0 +1,22 @@
+export const homeStrings = {
+  en: {
+    title: 'LifeLine LK',
+    nearbyBanks: 'Nearby blood banks',
+    highStockBanks: 'Well stocked',
+    lowStockBanks: 'Low stock banks',
+    criticalAlerts: 'Critical alerts',
+    noSummary: 'No blood stock summary available',
+    tryAgain: 'Try again',
+    loading: 'Loading summary',
+    header: 'Blood Banks – Check nearby blood availability',
+    yourType: 'Your type: O+ eligible',
+    upcomingCampaigns: 'upcoming campaigns',
+    requestBlood: 'Request Blood Now',
+    critical: 'Critical stock alert',
+    criticalMessage: (bloodGroup: string, bankName: string) => `${bloodGroup} stock is running low at ${bankName}.`,
+    viewCampaigns: 'View campaigns',
+    offlineDemo: 'Offline demo data',
+  },
+  si: {},
+  ta: {},
+} as const;
