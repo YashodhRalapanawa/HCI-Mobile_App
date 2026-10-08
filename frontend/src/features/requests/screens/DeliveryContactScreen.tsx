@@ -293,8 +293,7 @@ export function DeliveryContactScreen() {
         setLocalConfirmedAt(simulatedTime);
         setIsConfirmingArrival(false);
         setConfirmModalVisible(false);
-        setFeedbackNotice('Arrival confirmed (preview mode — simulated locally).');
-        setTimeout(() => setFeedbackNotice(null), 4000);
+        router.replace('/requests/preview/arrival-confirmed');
       }, 450);
       return;
     }
@@ -322,22 +321,17 @@ export function DeliveryContactScreen() {
         setAssignment(response.deliveryAssignment);
       }
       setConfirmModalVisible(false);
-      setFeedbackNotice('Delivery arrival confirmed successfully.');
-      setTimeout(() => setFeedbackNotice(null), 4000);
+      router.replace({
+        pathname: '/requests/[id]/arrival-confirmed',
+        params: { id, assignmentId: currentAssignmentId },
+      });
     } catch (err: any) {
       const status = err?.status;
       const msg = err?.message || 'Failed to confirm arrival.';
 
       if (status === 409) {
-        // Handle conflict gracefully
-        if (msg.toLowerCase().includes('already confirmed')) {
-          await loadDeliveryAssignment();
-          setConfirmModalVisible(false);
-          setFeedbackNotice('Arrival was already confirmed.');
-          setTimeout(() => setFeedbackNotice(null), 4000);
-          return;
-        }
-        // Reassigned or ineligible: refresh current details so stale assignment is cleared
+        // Reassignment, missing assignment, or ineligible request status:
+        // refresh current details and display the server error
         await loadDeliveryAssignment();
         setConfirmError(msg);
       } else if (status === 401) {
@@ -620,6 +614,27 @@ export function DeliveryContactScreen() {
             <Text style={styles.arrivalConfirmedNote}>
               Physical arrival of the delivery person has been recorded. Blood unit inspection and hospital handoff remain pending.
             </Text>
+
+            {/* Member 2.7 Action: VIEW ARRIVAL CONFIRMATION */}
+            <TouchableOpacity
+              style={styles.viewConfirmationBtn}
+              onPress={() => {
+                if (isPreview) {
+                  router.push('/requests/preview/arrival-confirmed');
+                } else {
+                  router.push({
+                    pathname: '/requests/[id]/arrival-confirmed',
+                    params: { id, assignmentId: assignment?.assignmentId },
+                  });
+                }
+              }}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="View arrival confirmation details"
+            >
+              <Ionicons name="shield-checkmark-outline" size={16} color="#166534" style={{ marginRight: 6 }} />
+              <Text style={styles.viewConfirmationBtnText}>VIEW ARRIVAL CONFIRMATION</Text>
+            </TouchableOpacity>
           </View>
         ) : isEligibleForConfirmation ? (
           <View style={styles.confirmArrivalContainer}>
@@ -1220,6 +1235,24 @@ const styles = StyleSheet.create({
     color: '#166534',
     lineHeight: 18,
     opacity: 0.9,
+  },
+  viewConfirmationBtn: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1.2,
+    borderColor: '#86EFAC',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  viewConfirmationBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#166534',
+    letterSpacing: 0.3,
   },
   confirmArrivalContainer: {
     width: '100%',
