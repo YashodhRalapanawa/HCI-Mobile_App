@@ -22,7 +22,8 @@ import type { CreatedRequestResponse } from '../types';
 
 export function RequestSubmittedScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
+  const isDetailsMode = mode === 'details';
   const { token } = useAuth();
 
   const [request, setRequest] = useState<CreatedRequestResponse | null>(null);
@@ -32,7 +33,6 @@ export function RequestSubmittedScreen() {
     'unauthenticated' | 'not_found' | 'forbidden' | 'network' | 'preview_guidance' | null
   >(null);
   const [copiedRef, setCopiedRef] = useState(false);
-  const [showMyRequestsHint, setShowMyRequestsHint] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -150,7 +150,20 @@ export function RequestSubmittedScreen() {
           {/* Header Row */}
           <View style={styles.headerRow}>
             <View style={styles.titleContainer}>
-              <Text style={styles.headerTitle}>Request submitted</Text>
+              {isDetailsMode && (
+                <TouchableOpacity
+                  style={styles.detailsBackBtn}
+                  onPress={() => (router.canGoBack() ? router.back() : router.replace('/requests/my'))}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Return to My Requests"
+                >
+                  <Ionicons name="arrow-back" size={22} color="#0F172A" />
+                </TouchableOpacity>
+              )}
+              <Text style={styles.headerTitle}>
+                {isDetailsMode ? 'Request details' : 'Request submitted'}
+              </Text>
             </View>
 
             {__DEV__ && (
@@ -235,15 +248,28 @@ export function RequestSubmittedScreen() {
           {/* Success Content (Matches Figma Screenshot Exactly) */}
           {!loading && request && (
             <>
-              {/* Hero Success Section */}
+              {/* Hero Section */}
               <View style={styles.heroSection}>
-                <View style={styles.successIconCircle}>
-                  <Ionicons name="checkmark" size={38} color="#16A34A" />
+                <View
+                  style={[
+                    styles.successIconCircle,
+                    isDetailsMode && styles.detailsIconCircle,
+                  ]}
+                >
+                  <Ionicons
+                    name={isDetailsMode ? 'document-text-outline' : 'checkmark'}
+                    size={38}
+                    color={isDetailsMode ? colors.primary : '#16A34A'}
+                  />
                 </View>
 
-                <Text style={styles.heroTitle}>Request sent successfully</Text>
+                <Text style={styles.heroTitle}>
+                  {isDetailsMode ? 'Request details' : 'Request sent successfully'}
+                </Text>
                 <Text style={styles.heroSubtitle}>
-                  Your request has been sent for hospital review.
+                  {isDetailsMode
+                    ? 'Review hospital verification and request progress.'
+                    : 'Your request has been sent for hospital review.'}
                 </Text>
               </View>
 
@@ -376,30 +402,24 @@ export function RequestSubmittedScreen() {
                 </Text>
               </View>
 
-              {/* Action Button: VIEW MY REQUESTS (Member 2.3 Boundary) */}
+              {/* Action Button: VIEW MY REQUESTS / RETURN TO MY REQUESTS */}
               <View style={styles.actionContainer}>
                 <TouchableOpacity
-                  style={[styles.primaryCtaBtn, styles.primaryCtaDisabled]}
-                  onPress={() => setShowMyRequestsHint(true)}
-                  activeOpacity={0.7}
+                  style={styles.primaryCtaBtn}
+                  onPress={() => router.push('/requests/my')}
+                  activeOpacity={0.85}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: true }}
-                  accessibilityHint="My Requests list will be available in Member 2.3"
+                  accessibilityLabel={isDetailsMode ? 'Return to My Requests' : 'View My Requests'}
                 >
-                  <Text style={styles.primaryCtaText}>VIEW MY REQUESTS</Text>
+                  <Text style={styles.primaryCtaText}>
+                    {isDetailsMode ? 'RETURN TO MY REQUESTS' : 'VIEW MY REQUESTS'}
+                  </Text>
                 </TouchableOpacity>
 
-                {showMyRequestsHint && (
-                  <View style={styles.hintBubble}>
-                    <Ionicons name="information-circle-outline" size={16} color="#475569" />
-                    <Text style={styles.hintText}>
-                      My Requests list will be implemented in Member 2.3.
-                    </Text>
-                  </View>
-                )}
-
                 <Text style={styles.savedCaptionText}>
-                  Your request is saved. No need to submit it again.
+                  {isDetailsMode
+                    ? 'Tracking updates and hospital approvals are reflected in real time.'
+                    : 'Your request is saved. No need to submit it again.'}
                 </Text>
               </View>
             </>
@@ -438,6 +458,19 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailsBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   headerTitle: {
     fontSize: 24,
@@ -538,6 +571,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
+  },
+  detailsIconCircle: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
   },
   heroTitle: {
     fontSize: 22,

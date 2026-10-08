@@ -214,6 +214,13 @@ test('HTTP Request Routes Integration', async (t) => {
     assert.equal(res.status, 401);
   });
 
+  await t.test('GET /api/requests/my without authorization returns 401', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/requests/my`);
+    assert.equal(res.status, 401);
+    const body = (await res.json()) as { message: string };
+    assert.match(body.message, /authentication required/i);
+  });
+
   await t.test('Authentication & Member2.1 Submission with Isolated Test User', async (subT) => {
     if (!env.MONGODB_URI) {
       subT.skip('MONGODB_URI not configured, skipping DB-backed integration tests');
@@ -435,6 +442,254 @@ test('HTTP Request Routes Integration', async (t) => {
           const body = (await getRes.json()) as { message: string };
           assert.match(body.message, /permission/i);
         });
+
+        // 9. Validation of query parameters on GET /api/requests/my
+        await subT.test('GET /api/requests/my validates tab, page, and limit query params', async () => {
+          // Invalid tab
+          const tabRes = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=invalid`, {
+            headers: { Authorization: `Bearer ${realJwtToken}` },
+          });
+          assert.equal(tabRes.status, 400);
+          const tabBody = (await tabRes.json()) as { message: string };
+          assert.match(tabBody.message, /tab parameter/i);
+
+          // Invalid page (0)
+          const pageRes = await fetch(`http://127.0.0.1:${port}/api/requests/my?page=0`, {
+            headers: { Authorization: `Bearer ${realJwtToken}` },
+          });
+          assert.equal(pageRes.status, 400);
+          const pageBody = (await pageRes.json()) as { message: string };
+          assert.match(pageBody.message, /page number/i);
+
+          // Bounded limit (> 50)
+          const limitRes = await fetch(`http://127.0.0.1:${port}/api/requests/my?limit=51`, {
+            headers: { Authorization: `Bearer ${realJwtToken}` },
+          });
+          assert.equal(limitRes.status, 400);
+          const limitBody = (await limitRes.json()) as { message: string };
+          assert.match(limitBody.message, /limit exceeds maximum/i);
+        });
+
+        // 10. List filtering, counts across pagination, safe fields, and ownership
+        const extraReqIds: string[] = [];
+        try {
+          // User 1 extra requests:
+          // 1 verified
+          const verifiedDoc = await BloodRequest.create({
+            requesterId: createdUserId,
+            patientName: 'Verified Patient',
+            bloodGroup: 'O+',
+            unitsRequired: 2,
+            unitsFulfilled: 0,
+            hospitalId: 'hosp-colombo-city',
+            hospitalName: 'City Hospital, Colombo',
+            hospitalReferenceAndWard: 'REF-VERIFIED-01',
+            urgency: 'Scheduled',
+            document: {
+              originalName: 'dummy.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 100,
+              storageKey: 'internal-verified-key.pdf',
+            },
+            status: 'verified',
+          });
+          extraReqIds.push(verifiedDoc._id.toString());
+
+          // 1 in_progress
+          const inProgressDoc = await BloodRequest.create({
+            requesterId: createdUserId,
+            patientName: 'InProgress Patient',
+            bloodGroup: 'A+',
+            unitsRequired: 1,
+            unitsFulfilled: 0,
+            hospitalId: 'hosp-colombo-city',
+            hospitalName: 'City Hospital, Colombo',
+            hospitalReferenceAndWard: 'REF-INPROG-02',
+            urgency: 'Urgent',
+            document: {
+              originalName: 'dummy.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 100,
+              storageKey: 'internal-inprog-key.pdf',
+            },
+            status: 'in_progress',
+          });
+          extraReqIds.push(inProgressDoc._id.toString());
+
+          // 1 fulfilled (completed)
+          const fulfilledDoc = await BloodRequest.create({
+            requesterId: createdUserId,
+            patientName: 'Fulfilled Patient',
+            bloodGroup: 'AB+',
+            unitsRequired: 2,
+            unitsFulfilled: 2,
+            hospitalId: 'hosp-colombo-city',
+            hospitalName: 'City Hospital, Colombo',
+            hospitalReferenceAndWard: 'REF-FULFILLED-03',
+            urgency: 'Scheduled',
+            document: {
+              originalName: 'dummy.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 100,
+              storageKey: 'internal-fulfilled-key.pdf',
+            },
+            status: 'fulfilled',
+          });
+          extraReqIds.push(fulfilledDoc._id.toString());
+
+          // 1 cancelled (must NOT appear in active or completed tabs)
+          const cancelledDoc = await BloodRequest.create({
+            requesterId: createdUserId,
+            patientName: 'Cancelled Patient',
+            bloodGroup: 'B+',
+            unitsRequired: 1,
+            unitsFulfilled: 0,
+            hospitalId: 'hosp-colombo-city',
+            hospitalName: 'City Hospital, Colombo',
+            hospitalReferenceAndWard: 'REF-CANCELLED-04',
+            urgency: 'Urgent',
+            document: {
+              originalName: 'dummy.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 100,
+              storageKey: 'internal-cancelled-key.pdf',
+            },
+            status: 'cancelled',
+          });
+          extraReqIds.push(cancelledDoc._id.toString());
+
+          // User 2 request (to prove ownership isolation)
+          const user2Doc = await BloodRequest.create({
+            requesterId: secondUserId,
+            patientName: 'User 2 Patient',
+            bloodGroup: 'O-',
+            unitsRequired: 1,
+            unitsFulfilled: 0,
+            hospitalId: 'hosp-colombo-city',
+            hospitalName: 'City Hospital, Colombo',
+            hospitalReferenceAndWard: 'REF-USER2-05',
+            urgency: 'Urgent',
+            document: {
+              originalName: 'dummy.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 100,
+              storageKey: 'internal-user2-key.pdf',
+            },
+            status: 'pending_verification',
+          });
+          extraReqIds.push(user2Doc._id.toString());
+
+          // A. User 1 Active tab verification
+          await subT.test('GET /api/requests/my?tab=active returns only owner active requests & excludes cancelled/fulfilled', async () => {
+            const listRes = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=active`, {
+              headers: { Authorization: `Bearer ${realJwtToken}` },
+            });
+            assert.equal(listRes.status, 200);
+            const data = (await listRes.json()) as {
+              requests: Array<{
+                id: string;
+                bloodGroup: string;
+                unitsRequired: number;
+                status: string;
+                document?: unknown;
+              }>;
+              pagination: { total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean };
+              counts: { active: number; completed: number };
+            };
+
+            // User 1 has 3 active requests: original pending_verification, verified, in_progress
+            assert.equal(data.requests.length, 3);
+            assert.equal(data.pagination.total, 3);
+            assert.equal(data.counts.active, 3);
+            assert.equal(data.counts.completed, 1);
+
+            const statuses = data.requests.map((r) => r.status);
+            assert.ok(statuses.includes('pending_verification'));
+            assert.ok(statuses.includes('verified'));
+            assert.ok(statuses.includes('in_progress'));
+            assert.ok(!statuses.includes('fulfilled'));
+            assert.ok(!statuses.includes('cancelled'));
+
+            // Safe fields: verify internal storageKey/document is not exposed in list
+            for (const r of data.requests) {
+              assert.equal(r.document, undefined);
+              assert.equal((r as Record<string, unknown>).storageKey, undefined);
+            }
+          });
+
+          // B. User 1 Completed tab verification
+          await subT.test('GET /api/requests/my?tab=completed returns only fulfilled requests & excludes cancelled', async () => {
+            const compRes = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=completed`, {
+              headers: { Authorization: `Bearer ${realJwtToken}` },
+            });
+            assert.equal(compRes.status, 200);
+            const compData = (await compRes.json()) as {
+              requests: Array<{ id: string; status: string }>;
+              pagination: { total: number };
+              counts: { active: number; completed: number };
+            };
+
+            assert.equal(compData.requests.length, 1);
+            assert.equal(compData.pagination.total, 1);
+            assert.equal(compData.requests[0]?.status, 'fulfilled');
+            assert.equal(compData.counts.active, 3);
+            assert.equal(compData.counts.completed, 1);
+          });
+
+          // C. Pagination and stable ordering verification
+          await subT.test('GET /api/requests/my validates pagination and descending order', async () => {
+            const p1Res = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=active&page=1&limit=2`, {
+              headers: { Authorization: `Bearer ${realJwtToken}` },
+            });
+            assert.equal(p1Res.status, 200);
+            const p1 = (await p1Res.json()) as {
+              requests: Array<{ id: string; createdAt: string }>;
+              pagination: { page: number; limit: number; total: number; totalPages: number; hasNextPage: boolean };
+            };
+            assert.equal(p1.requests.length, 2);
+            assert.equal(p1.pagination.page, 1);
+            assert.equal(p1.pagination.limit, 2);
+            assert.equal(p1.pagination.total, 3);
+            assert.equal(p1.pagination.totalPages, 2);
+            assert.equal(p1.pagination.hasNextPage, true);
+
+            const p2Res = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=active&page=2&limit=2`, {
+              headers: { Authorization: `Bearer ${realJwtToken}` },
+            });
+            assert.equal(p2Res.status, 200);
+            const p2 = (await p2Res.json()) as {
+              requests: Array<{ id: string }>;
+              pagination: { page: number; hasNextPage: boolean };
+            };
+            assert.equal(p2.requests.length, 1);
+            assert.equal(p2.pagination.page, 2);
+            assert.equal(p2.pagination.hasNextPage, false);
+
+            // Verify no overlap between page 1 and page 2
+            const p1Ids = p1.requests.map((r) => r.id);
+            assert.ok(!p1Ids.includes(p2.requests[0]!.id));
+          });
+
+          // D. Ownership isolation: User 2 can never see User 1's requests
+          await subT.test('User 2 listing /api/requests/my only sees User 2 records', async () => {
+            const u2Res = await fetch(`http://127.0.0.1:${port}/api/requests/my?tab=active`, {
+              headers: { Authorization: `Bearer ${secondUserToken}` },
+            });
+            assert.equal(u2Res.status, 200);
+            const u2Data = (await u2Res.json()) as {
+              requests: Array<{ id: string }>;
+              counts: { active: number; completed: number };
+            };
+            assert.equal(u2Data.requests.length, 1);
+            assert.equal(u2Data.requests[0]?.id, user2Doc._id.toString());
+            assert.equal(u2Data.counts.active, 1);
+            assert.equal(u2Data.counts.completed, 0);
+          });
+        } finally {
+          for (const reqId of extraReqIds) {
+            await BloodRequest.findByIdAndDelete(reqId);
+          }
+        }
       } finally {
         if (secondUserId) {
           await User.findByIdAndDelete(secondUserId);

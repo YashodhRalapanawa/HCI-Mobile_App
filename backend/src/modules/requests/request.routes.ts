@@ -3,7 +3,7 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import { authenticate, type AuthenticatedRequest } from '../../middleware/auth.js';
 import { SAMPLE_HOSPITALS, getHospitalById } from './hospital.data.js';
-import { BloodRequest, type BloodRequestDocument } from './request.model.js';
+import { BloodRequest, type BloodRequestDocument, type RequestStatus } from './request.model.js';
 import { createBloodRequestSchema } from './request.validation.js';
 import {
   documentUpload,
@@ -149,6 +149,127 @@ requestRouter.post(
       console.error('[requests] Error creating request:', error);
       res.status(500).json({
         message: 'An error occurred while saving the blood request. Please try again.',
+      });
+    }
+  },
+);
+
+function serializeRequestSummary(reqDoc: BloodRequestDocument) {
+  return {
+    id: reqDoc._id.toString(),
+    patientName: reqDoc.patientName,
+    bloodGroup: reqDoc.bloodGroup,
+    unitsRequired: reqDoc.unitsRequired,
+    unitsFulfilled: reqDoc.unitsFulfilled,
+    hospitalId: reqDoc.hospitalId,
+    hospitalName: reqDoc.hospitalName,
+    hospitalReferenceAndWard: reqDoc.hospitalReferenceAndWard,
+    urgency: reqDoc.urgency,
+    status: reqDoc.status,
+    createdAt: reqDoc.createdAt.toISOString(),
+  };
+}
+
+/**
+ * GET /api/requests/my
+ * Retrieves authenticated user's blood requests list filtered by tab (active or completed).
+ * Protected by authenticate middleware. Derives ownership exclusively from req.user._id.
+ */
+requestRouter.get(
+  '/my',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const MAX_LIMIT = 50;
+      const DEFAULT_LIMIT = 20;
+
+      const tabParam = req.query.tab ? String(req.query.tab).toLowerCase() : 'active';
+      if (tabParam !== 'active' && tabParam !== 'completed') {
+        res.status(400).json({
+          message: "Invalid tab parameter. Must be 'active' or 'completed'.",
+        });
+        return;
+      }
+
+      let page = 1;
+      if (req.query.page !== undefined) {
+        const parsedPage = Number(req.query.page);
+        if (!Number.isInteger(parsedPage) || parsedPage < 1) {
+          res.status(400).json({
+            message: 'Invalid page number. Must be an integer greater than or equal to 1.',
+          });
+          return;
+        }
+        page = parsedPage;
+      }
+
+      let limit = DEFAULT_LIMIT;
+      if (req.query.limit !== undefined) {
+        const parsedLimit = Number(req.query.limit);
+        if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+          res.status(400).json({
+            message: 'Invalid limit number. Must be an integer greater than or equal to 1.',
+          });
+          return;
+        }
+        if (parsedLimit > MAX_LIMIT) {
+          res.status(400).json({
+            message: `Limit exceeds maximum allowed of ${MAX_LIMIT}.`,
+          });
+          return;
+        }
+        limit = parsedLimit;
+      }
+
+      const userId = req.user!._id;
+
+      // Active tab: pending_verification, verified, in_progress
+      // Completed tab: fulfilled only
+      // Cancelled requests are excluded from both tabs
+      const activeStatuses: RequestStatus[] = ['pending_verification', 'verified', 'in_progress'];
+      const completedStatuses: RequestStatus[] = ['fulfilled'];
+
+      const activeFilter: Record<string, unknown> = {
+        requesterId: userId,
+        status: { $in: activeStatuses },
+      };
+      const completedFilter: Record<string, unknown> = {
+        requesterId: userId,
+        status: { $in: completedStatuses },
+      };
+
+      const [activeCount, completedCount] = await Promise.all([
+        BloodRequest.countDocuments(activeFilter),
+        BloodRequest.countDocuments(completedFilter),
+      ]);
+
+      const currentFilter = tabParam === 'active' ? activeFilter : completedFilter;
+      const total = tabParam === 'active' ? activeCount : completedCount;
+      const skip = (page - 1) * limit;
+
+      const items = await BloodRequest.find(currentFilter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      res.status(200).json({
+        requests: items.map((item) => serializeRequestSummary(item as unknown as BloodRequestDocument)),
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNextPage: page * limit < total,
+        },
+        counts: {
+          active: activeCount,
+          completed: completedCount,
+        },
+      });
+    } catch (error) {
+      console.error('[requests] Error listing user requests:', error);
+      res.status(500).json({
+        message: 'An error occurred while loading your blood requests.',
       });
     }
   },

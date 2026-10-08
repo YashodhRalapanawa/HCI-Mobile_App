@@ -1,5 +1,11 @@
 import { apiRequest } from '@/services/api';
-import type { HospitalOption, CreatedRequestResponse, CreateRequestFormValues } from '../types';
+import type {
+  HospitalOption,
+  CreatedRequestResponse,
+  CreateRequestFormValues,
+  MyRequestsTab,
+  MyRequestsResponse,
+} from '../types';
 
 export const requestApi = {
   getHospitals: async (): Promise<HospitalOption[]> => {
@@ -66,5 +72,24 @@ export const requestApi = {
       },
     });
     return res.request;
+  },
+
+  getMyRequests: async (
+    token: string,
+    tab: MyRequestsTab = 'active',
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<MyRequestsResponse> => {
+    const params = new URLSearchParams({
+      tab,
+      page: String(page),
+      limit: String(limit),
+    });
+    return apiRequest<MyRequestsResponse>(`requests/my?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
   },
 };

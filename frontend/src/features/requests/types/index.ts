@@ -50,3 +50,38 @@ export interface CreateRequestFormValues {
   urgency: UrgencyType;
   document: SelectedDocument | null;
 }
+
+export type MyRequestsTab = 'active' | 'completed';
+
+export interface MyRequestSummaryItem {
+  id: string;
+  patientName: string;
+  bloodGroup: BloodGroupType;
+  unitsRequired: number;
+  unitsFulfilled: number;
+  hospitalId: string;
+  hospitalName: string;
+  hospitalReferenceAndWard: string;
+  urgency: UrgencyType;
+  status: RequestStatus;
+  createdAt: string;
+}
+
+export interface MyRequestsPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+}
+
+export interface MyRequestsCounts {
+  active: number;
+  completed: number;
+}
+
+export interface MyRequestsResponse {
+  requests: MyRequestSummaryItem[];
+  pagination: MyRequestsPagination;
+  counts: MyRequestsCounts;
+}

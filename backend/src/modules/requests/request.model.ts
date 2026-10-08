@@ -110,6 +110,8 @@ const bloodRequestSchema = new Schema<BloodRequestDocument>(
   { timestamps: true },
 );
 
+bloodRequestSchema.index({ requesterId: 1, status: 1, createdAt: -1, _id: -1 });
+
 export const BloodRequest: Model<BloodRequestDocument> =
   mongoose.models.BloodRequest ||
   mongoose.model<BloodRequestDocument>('BloodRequest', bloodRequestSchema);

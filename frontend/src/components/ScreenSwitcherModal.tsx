@@ -41,6 +41,7 @@ export const MEMBER_1_SCREENS: ScreenItem[] = [
   { id: 18, title: 'Public Donor Profile View', route: '/profile/public-preview', category: 'profile', figmaName: 'Member 1 — Public Donor View' },
   { id: 19, title: 'New Blood Request', route: '/requests/new', category: 'requests', figmaName: 'Member 2.1 — New Blood Request' },
   { id: 20, title: 'Request Submitted (Confirmation)', route: '/requests/preview/submitted', category: 'requests', figmaName: 'Member 2.2 — Request Submitted' },
+  { id: 21, title: 'My Requests (List & Status)', route: '/requests/my', category: 'requests', figmaName: 'Member 2.3 — My Requests' },
 ];
 
 interface ScreenSwitcherProps {
@@ -73,6 +74,8 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
       ? 'Member 2.1'
       : currentScreenId === 20
       ? 'Member 2.2'
+      : currentScreenId === 21
+      ? 'Member 2.3'
       : activeIndex !== -1
       ? `Screen ${activeIndex + 1}/${MEMBER_1_SCREENS.length}`
       : `Screen ${currentScreenId}`;
