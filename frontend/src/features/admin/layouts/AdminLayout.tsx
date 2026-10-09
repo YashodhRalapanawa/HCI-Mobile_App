@@ -7,7 +7,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadows } from '@/theme';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -29,6 +29,7 @@ interface NavItem {
 
 export function AdminLayout({ children, isPreview = false }: AdminLayoutProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, logout } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
@@ -38,13 +39,16 @@ export function AdminLayout({ children, isPreview = false }: AdminLayoutProps) {
   const adminName = user?.name || (isPreview ? 'Preview Administrator' : 'Administrator');
   const adminEmail = user?.email || (isPreview ? 'admin@lifeline.lk' : '');
 
+  const isPatientRequestsActive = pathname?.includes('/admin/patient-requests') || false;
+  const isDashboardActive = !isPatientRequestsActive && (pathname === '/admin' || pathname === '/admin/');
+
   const navItems: NavItem[] = [
     {
       id: 'dashboard',
       label: 'Dashboard',
       icon: 'grid-outline',
       route: '/admin',
-      isActive: true,
+      isActive: isDashboardActive,
       isDisabled: false,
     },
     {
@@ -52,9 +56,8 @@ export function AdminLayout({ children, isPreview = false }: AdminLayoutProps) {
       label: 'Patient Requests',
       icon: 'medkit-outline',
       route: '/admin/patient-requests',
-      isActive: false,
-      isDisabled: true,
-      badge: 'Not available yet',
+      isActive: isPatientRequestsActive,
+      isDisabled: false,
     },
     {
       id: 'donation-requests',
@@ -93,10 +96,9 @@ export function AdminLayout({ children, isPreview = false }: AdminLayoutProps) {
             ]}
             onPress={() => {
               if (item.isDisabled) return;
-              if (item.route === '/admin') {
-                setIsMobileMenuOpen(false);
-                router.push((isPreview ? '/admin?preview=1' : '/admin') as any);
-              }
+              setIsMobileMenuOpen(false);
+              const targetRoute = isPreview ? `${item.route}?preview=1` : item.route;
+              router.push(targetRoute as any);
             }}
             disabled={item.isDisabled}
             activeOpacity={item.isDisabled ? 1 : 0.7}

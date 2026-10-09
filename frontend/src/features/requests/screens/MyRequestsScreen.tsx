@@ -32,7 +32,11 @@ export function MyRequestsScreen() {
 
   const [activeTab, setActiveTab] = useState<MyRequestsTab>('active');
   const [requests, setRequests] = useState<MyRequestSummaryItem[]>([]);
-  const [counts, setCounts] = useState<{ active: number; completed: number }>({ active: 0, completed: 0 });
+  const [counts, setCounts] = useState<{ active: number; completed: number; rejected: number }>({
+    active: 0,
+    completed: 0,
+    rejected: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -392,6 +396,21 @@ export function MyRequestsScreen() {
             Completed ({counts.completed})
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'rejected' && styles.tabButtonActive]}
+          onPress={() => handleTabChange('rejected')}
+          activeOpacity={0.8}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'rejected' }}
+          accessibilityLabel={`Rejected requests, ${counts.rejected} items`}
+        >
+          <Text
+            style={[styles.tabButtonText, activeTab === 'rejected' && styles.tabButtonTextActive]}
+          >
+            Rejected ({counts.rejected})
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -462,6 +481,20 @@ export function MyRequestsScreen() {
             <Ionicons name="add" size={18} color="#FFFFFF" />
             <Text style={styles.primaryActionBtnText}>Create New Request</Text>
           </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (activeTab === 'rejected') {
+      return (
+        <View style={styles.emptyCard}>
+          <View style={[styles.emptyIconCircle, { backgroundColor: '#FEE2E2' }]}>
+            <Ionicons name="close-circle-outline" size={32} color="#DC2626" />
+          </View>
+          <Text style={styles.emptyTitle}>No rejected requests</Text>
+          <Text style={styles.emptyBody}>
+            Requests that could not be approved during hospital review will appear here with the reviewer feedback.
+          </Text>
         </View>
       );
     }

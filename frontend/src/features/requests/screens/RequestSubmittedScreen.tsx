@@ -363,6 +363,7 @@ export function RequestSubmittedScreen() {
                   styles.statusNoticeCard,
                   request.status === 'verified' && styles.statusNoticeCardVerified,
                   request.status === 'fulfilled' && styles.statusNoticeCardFulfilled,
+                  request.status === 'rejected' && styles.statusNoticeCardRejected,
                 ]}
               >
                 <View style={styles.statusNoticeHeader}>
@@ -372,6 +373,8 @@ export function RequestSubmittedScreen() {
                         ? 'shield-checkmark'
                         : request.status === 'fulfilled'
                         ? 'checkmark-done-circle'
+                        : request.status === 'rejected'
+                        ? 'close-circle'
                         : 'time-outline'
                     }
                     size={20}
@@ -380,6 +383,8 @@ export function RequestSubmittedScreen() {
                         ? '#059669'
                         : request.status === 'fulfilled'
                         ? '#0D9488'
+                        : request.status === 'rejected'
+                        ? '#DC2626'
                         : '#B45309'
                     }
                   />
@@ -388,6 +393,7 @@ export function RequestSubmittedScreen() {
                       styles.statusNoticeTitle,
                       request.status === 'verified' && styles.statusNoticeTitleVerified,
                       request.status === 'fulfilled' && styles.statusNoticeTitleFulfilled,
+                      request.status === 'rejected' && styles.statusNoticeTitleRejected,
                     ]}
                   >
                     {request.status === 'pending_verification'
@@ -398,6 +404,8 @@ export function RequestSubmittedScreen() {
                       ? 'Donation In Progress'
                       : request.status === 'fulfilled'
                       ? 'Request Fulfilled'
+                      : request.status === 'rejected'
+                      ? 'Request Rejected'
                       : 'Request Status Updated'}
                   </Text>
                 </View>
@@ -409,8 +417,17 @@ export function RequestSubmittedScreen() {
                     ? 'The hospital has verified this request. Nearby eligible donors are being alerted.'
                     : request.status === 'fulfilled'
                     ? 'All required blood units have been successfully donated and fulfilled.'
+                    : request.status === 'rejected'
+                    ? 'This request was not approved during hospital review.'
                     : 'Your blood request is saved in the database. Follow updates in My Requests.'}
                 </Text>
+
+                {request.status === 'rejected' && request.rejectionReason ? (
+                  <View style={styles.rejectionReasonBox}>
+                    <Text style={styles.rejectionReasonLabel}>Reviewer Reason:</Text>
+                    <Text style={styles.rejectionReasonText}>{request.rejectionReason}</Text>
+                  </View>
+                ) : null}
               </View>
 
               {/* Action Button: VIEW MY REQUESTS / RETURN TO MY REQUESTS */}
@@ -750,6 +767,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0FDFA',
     borderColor: '#99F6E4',
   },
+  statusNoticeCardRejected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
   statusNoticeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -767,10 +788,34 @@ const styles = StyleSheet.create({
   statusNoticeTitleFulfilled: {
     color: '#115E59',
   },
+  statusNoticeTitleRejected: {
+    color: '#991B1B',
+  },
   statusNoticeBody: {
     fontSize: 13,
     color: '#78350F',
     lineHeight: 19,
+  },
+  rejectionReasonBox: {
+    marginTop: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    padding: spacing.sm,
+  },
+  rejectionReasonLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#991B1B',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  rejectionReasonText: {
+    fontSize: 13,
+    color: '#1E293B',
+    lineHeight: 18,
   },
 
   // Action Container

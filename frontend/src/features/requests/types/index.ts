@@ -20,7 +20,8 @@ export type RequestStatus =
   | 'verified'
   | 'in_progress'
   | 'fulfilled'
-  | 'cancelled';
+  | 'cancelled'
+  | 'rejected';
 
 export interface CreatedRequestResponse {
   id: string;
@@ -39,6 +40,8 @@ export interface CreatedRequestResponse {
     sizeBytes: number;
   };
   deliveryAssignment?: DeliveryAssignmentInfo | null;
+  rejectionReason?: string;
+  reviewedAt?: string;
   createdAt: string;
 }
 
@@ -52,7 +55,7 @@ export interface CreateRequestFormValues {
   document: SelectedDocument | null;
 }
 
-export type MyRequestsTab = 'active' | 'completed';
+export type MyRequestsTab = 'active' | 'completed' | 'rejected';
 
 export interface DeliveryAssignmentInfo {
   assignmentId: string;
@@ -97,6 +100,8 @@ export interface MyRequestSummaryItem {
   status: RequestStatus;
   acceptedDonorsCount?: number;
   hasDeliveryAssignment?: boolean;
+  rejectionReason?: string;
+  reviewedAt?: string;
   createdAt: string;
 }
 
@@ -136,6 +141,7 @@ export interface MyRequestsPagination {
 export interface MyRequestsCounts {
   active: number;
   completed: number;
+  rejected: number;
 }
 
 export interface MyRequestsResponse {

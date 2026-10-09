@@ -38,6 +38,7 @@ function serializeRequest(reqDoc: BloodRequestDocument) {
     hospitalReferenceAndWard: reqDoc.hospitalReferenceAndWard,
     urgency: reqDoc.urgency,
     status: reqDoc.status,
+    rejectionReason: reqDoc.rejectionReason || null,
     document: {
       originalName: reqDoc.document.originalName,
       mimeType: reqDoc.document.mimeType,
@@ -49,9 +50,14 @@ function serializeRequest(reqDoc: BloodRequestDocument) {
           deliveryPersonName: reqDoc.deliveryAssignment.deliveryPersonName,
           contactPhone: reqDoc.deliveryAssignment.contactPhone,
           assignedAt: reqDoc.deliveryAssignment.assignedAt.toISOString(),
+          arrivalConfirmedAt: reqDoc.deliveryAssignment.arrivalConfirmedAt
+            ? reqDoc.deliveryAssignment.arrivalConfirmedAt.toISOString()
+            : null,
+          isArrivalConfirmed: Boolean(reqDoc.deliveryAssignment.arrivalConfirmedAt),
         }
       : null,
     createdAt: reqDoc.createdAt.toISOString(),
+    updatedAt: reqDoc.updatedAt.toISOString(),
   };
 }
 
@@ -186,15 +192,17 @@ function serializeRequestSummary(reqDoc: BloodRequestDocument, acceptedDonorsCou
     hospitalReferenceAndWard: reqDoc.hospitalReferenceAndWard,
     urgency: reqDoc.urgency,
     status: reqDoc.status,
+    rejectionReason: reqDoc.rejectionReason || null,
     acceptedDonorsCount,
     hasDeliveryAssignment: Boolean(reqDoc.deliveryAssignment?.assignmentId),
     createdAt: reqDoc.createdAt.toISOString(),
+    updatedAt: reqDoc.updatedAt.toISOString(),
   };
 }
 
 /**
  * GET /api/requests/my
- * Retrieves authenticated user's blood requests list filtered by tab (active or completed).
+ * Retrieves authenticated user's blood requests list filtered by tab (active, completed, or rejected).
  * Protected by authenticate middleware. Derives ownership exclusively from req.user._id.
  */
 requestRouter.get(
@@ -206,9 +214,9 @@ requestRouter.get(
       const DEFAULT_LIMIT = 20;
 
       const tabParam = req.query.tab ? String(req.query.tab).toLowerCase() : 'active';
-      if (tabParam !== 'active' && tabParam !== 'completed') {
+      if (tabParam !== 'active' && tabParam !== 'completed' && tabParam !== 'rejected') {
         res.status(400).json({
-          message: "Invalid tab parameter. Must be 'active' or 'completed'.",
+          message: "Invalid tab parameter. Must be 'active', 'completed', or 'rejected'.",
         });
         return;
       }
@@ -247,9 +255,11 @@ requestRouter.get(
 
       // Active tab: pending_verification, verified, in_progress
       // Completed tab: fulfilled only
-      // Cancelled requests are excluded from both tabs
+      // Rejected tab: rejected only
+      // Cancelled requests are excluded from tabs
       const activeStatuses: RequestStatus[] = ['pending_verification', 'verified', 'in_progress'];
       const completedStatuses: RequestStatus[] = ['fulfilled'];
+      const rejectedStatuses: RequestStatus[] = ['rejected'];
 
       const activeFilter: Record<string, unknown> = {
         requesterId: userId,
@@ -259,14 +269,21 @@ requestRouter.get(
         requesterId: userId,
         status: { $in: completedStatuses },
       };
+      const rejectedFilter: Record<string, unknown> = {
+        requesterId: userId,
+        status: { $in: rejectedStatuses },
+      };
 
-      const [activeCount, completedCount] = await Promise.all([
+      const [activeCount, completedCount, rejectedCount] = await Promise.all([
         BloodRequest.countDocuments(activeFilter),
         BloodRequest.countDocuments(completedFilter),
+        BloodRequest.countDocuments(rejectedFilter),
       ]);
 
-      const currentFilter = tabParam === 'active' ? activeFilter : completedFilter;
-      const total = tabParam === 'active' ? activeCount : completedCount;
+      const currentFilter =
+        tabParam === 'active' ? activeFilter : tabParam === 'completed' ? completedFilter : rejectedFilter;
+      const total =
+        tabParam === 'active' ? activeCount : tabParam === 'completed' ? completedCount : rejectedCount;
       const skip = (page - 1) * limit;
 
       const items = await BloodRequest.find(currentFilter)
@@ -301,6 +318,7 @@ requestRouter.get(
         counts: {
           active: activeCount,
           completed: completedCount,
+          rejected: rejectedCount,
         },
       });
     } catch (error) {

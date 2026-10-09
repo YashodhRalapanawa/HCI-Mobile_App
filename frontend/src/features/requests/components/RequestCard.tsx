@@ -28,7 +28,11 @@ interface StatusVisualConfig {
   actionText: string;
 }
 
-function getStatusConfig(status: RequestStatus, hasDeliveryAssignment?: boolean): StatusVisualConfig {
+function getStatusConfig(
+  status: RequestStatus,
+  hasDeliveryAssignment?: boolean,
+  rejectionReason?: string,
+): StatusVisualConfig {
   switch (status) {
     case 'pending_verification':
       return {
@@ -72,6 +76,18 @@ function getStatusConfig(status: RequestStatus, hasDeliveryAssignment?: boolean)
         iconName: 'checkmark-circle-outline',
         actionText: 'View request details',
       };
+    case 'rejected':
+      return {
+        label: 'Rejected',
+        supportingText: rejectionReason
+          ? `Reason: ${rejectionReason}`
+          : 'This request was not approved during hospital verification.',
+        badgeBg: '#FEE2E2',
+        badgeTextColor: '#991B1B',
+        badgeBorderColor: '#FCA5A5',
+        iconName: 'close-circle-outline',
+        actionText: 'View request details',
+      };
     case 'cancelled':
     default:
       return {
@@ -95,7 +111,7 @@ export function RequestCard({
   isDeleting = false,
 }: RequestCardProps) {
   const [copied, setCopied] = useState(false);
-  const statusConfig = getStatusConfig(item.status, item.hasDeliveryAssignment);
+  const statusConfig = getStatusConfig(item.status, item.hasDeliveryAssignment, item.rejectionReason);
   const isPending = item.status === 'pending_verification';
 
   const handleCopyReference = async () => {

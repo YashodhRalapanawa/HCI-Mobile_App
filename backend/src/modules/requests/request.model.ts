@@ -8,7 +8,8 @@ export type RequestStatus =
   | 'verified'
   | 'in_progress'
   | 'fulfilled'
-  | 'cancelled';
+  | 'cancelled'
+  | 'rejected';
 
 export interface RequestDocumentMetadata {
   originalName: string;
@@ -38,6 +39,9 @@ export interface BloodRequestDocument extends Document {
   urgency: RequestUrgency;
   document: RequestDocumentMetadata;
   status: RequestStatus;
+  rejectionReason?: string;
+  reviewedBy?: Types.ObjectId;
+  reviewedAt?: Date;
   deliveryAssignment?: DeliveryAssignment;
   createdAt: Date;
   updatedAt: Date;
@@ -124,9 +128,21 @@ const bloodRequestSchema = new Schema<BloodRequestDocument>(
     },
     status: {
       type: String,
-      enum: ['pending_verification', 'verified', 'in_progress', 'fulfilled', 'cancelled'],
+      enum: ['pending_verification', 'verified', 'in_progress', 'fulfilled', 'cancelled', 'rejected'],
       default: 'pending_verification',
       index: true,
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
+    reviewedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    reviewedAt: {
+      type: Date,
     },
     deliveryAssignment: {
       type: deliveryAssignmentSchema,

@@ -325,14 +325,32 @@ export function AdminDashboardScreen() {
         <View style={[styles.gridContainer, isDesktop && styles.desktopGrid]}>
           {SUMMARY_CARDS.map((card) => {
             const count = summary[card.countKey] ?? 0;
+            const isPatientCard = ['pending', 'approved', 'assigned', 'arrived'].includes(card.id);
+            const targetStatus =
+              card.id === 'pending'
+                ? 'pending_verification'
+                : card.id === 'approved'
+                ? 'verified'
+                : card.id === 'assigned'
+                ? 'in_progress'
+                : 'all';
 
             return (
-              <View
+              <TouchableOpacity
                 key={card.id}
                 style={[
                   styles.card,
                   isDesktop && styles.desktopCard,
                 ]}
+                onPress={() => {
+                  if (isPatientCard) {
+                    const url = isPreview
+                      ? `/admin/patient-requests?status=${targetStatus}&preview=1`
+                      : `/admin/patient-requests?status=${targetStatus}`;
+                    router.push(url as any);
+                  }
+                }}
+                activeOpacity={isPatientCard ? 0.75 : 1}
               >
                 <View style={styles.cardTopRow}>
                   <View
@@ -349,10 +367,15 @@ export function AdminDashboardScreen() {
                 </View>
 
                 <View style={styles.cardBody}>
-                  <Text style={styles.cardTitle}>{card.title}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={styles.cardTitle}>{card.title}</Text>
+                    {isPatientCard && (
+                      <Ionicons name="arrow-forward" size={14} color={card.accentColor} />
+                    )}
+                  </View>
                   <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
