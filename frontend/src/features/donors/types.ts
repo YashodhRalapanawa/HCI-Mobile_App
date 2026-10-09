@@ -30,3 +30,5 @@ export interface NotificationItem {
   relatedRequestId?: string;
 }
 export interface ChatMessage { _id: string; senderId: string; text: string; createdAt: string; }
+
+export * from './types/index';

@@ -119,19 +119,13 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
         accessibilityLabel={`Open pages, screen ${currentScreenId} of ${MEMBER_1_SCREENS.length}`}
         accessibilityRole="button"
       >
-<<<<<<< HEAD
-        <Ionicons name="layers-outline" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
-        <Text style={styles.pillText}>{pillText}</Text>
-        <Ionicons name="chevron-down" size={13} color="#FFFFFF" style={{ marginLeft: 3 }} />
-=======
         <Ionicons name="layers-outline" size={compact ? 18 : 14} color="#FFFFFF" style={compact ? undefined : styles.pillIcon} />
         {!compact && (
           <>
-            <Text style={styles.pillText}>Screen {currentScreenId}/{MEMBER_1_SCREENS.length}</Text>
+            <Text style={styles.pillText}>{pillText}</Text>
             <Ionicons name="chevron-down" size={13} color="#FFFFFF" style={styles.pillChevron} />
           </>
         )}
->>>>>>> origin/Lakshani
       </TouchableOpacity>
 
       <Modal

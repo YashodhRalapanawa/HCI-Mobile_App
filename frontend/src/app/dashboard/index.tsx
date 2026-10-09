@@ -71,7 +71,6 @@ const INITIAL_REQUESTS: NearbyRequest[] = [
 
 export default function DashboardScreen() {
   const router = useRouter();
-<<<<<<< HEAD
   const { user, token, isLoading } = useAuth();
 
   useEffect(() => {
@@ -83,10 +82,7 @@ export default function DashboardScreen() {
       }
     }
   }, [isLoading, token, user?.role, router]);
-=======
-  const { user } = useAuth();
   const insets = useSafeAreaInsets();
->>>>>>> origin/Lakshani
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<NearbyRequest | null>(null);

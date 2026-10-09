@@ -12,7 +12,6 @@ interface BottomNavBarProps {
 
 export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
   const router = useRouter();
-<<<<<<< HEAD
   const { user } = useAuth();
 
   const handleHomePress = () => {
@@ -24,9 +23,7 @@ export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
       router.replace('/dashboard' as any);
     }
   };
-=======
   const insets = useSafeAreaInsets();
->>>>>>> origin/Lakshani
 
   return (
     <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 6) }]}>
