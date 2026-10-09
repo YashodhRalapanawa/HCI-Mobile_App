@@ -603,6 +603,8 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
   },
   avatar: {
     width: 44,
@@ -626,6 +628,7 @@ const styles = StyleSheet.create({
   },
   greetingContainer: {
     justifyContent: 'center',
+    flexShrink: 1,
   },
   greetingText: {
     fontSize: 12,
@@ -637,11 +640,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#111827',
     marginTop: 1,
+    flexShrink: 1,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   notificationBtn: {
     width: 40,

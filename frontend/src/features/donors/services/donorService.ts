@@ -8,7 +8,7 @@ const mockDonors: Donor[] = [
 let localSearches: SavedSearch[] = [];
 let localRequests: DonorRequest[] = [];
 let localNotifications: NotificationItem[] = [];
-let localMessages: ChatMessage[] = [];
+const localChats = new Map<string, ChatMessage[]>();
 async function fallback<T>(remote: () => Promise<T>, local: () => T): Promise<T> { try { return await remote(); } catch { return local(); } }
 function authInit(token: string | null, init: RequestInit = {}): RequestInit { return { ...init, headers: { ...(init.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } }; }
 
@@ -27,10 +27,13 @@ export const donorService = {
   readAll: (token: string | null) => fallback(() => apiRequest<void>('notifications/read-all', authInit(token, { method: 'PATCH' })).then(() => undefined), () => { localNotifications = localNotifications.map((n) => ({ ...n, read: true })); }),
   respond: (token: string | null, id: string, response: 'accepted' | 'declined') => fallback(() => apiRequest<void>(`notifications/${id}/respond`, authInit(token, { method: 'POST', body: JSON.stringify({ response }) })).then(() => undefined), () => undefined),
   deleteNotification: (token: string | null, id: string) => fallback(() => apiRequest<void>(`notifications/${id}`, authInit(token, { method: 'DELETE' })).then(() => undefined), () => { localNotifications = localNotifications.filter((n) => n._id !== id); }),
-  getChat: (token: string | null, donorId: string) => fallback(() => apiRequest<{ chat: { id: string } }>('chats', authInit(token, { method: 'POST', body: JSON.stringify({ donorId }) })).then((r) => r.chat.id), () => 'local-chat'),
-  messages: (token: string | null, chatId: string) => fallback(() => apiRequest<{ messages: ChatMessage[] }>(`chats/${chatId}/messages`, authInit(token)).then((r) => r.messages), () => localMessages),
-  sendMessage: (token: string | null, chatId: string, text: string) => fallback(() => apiRequest<{ message: ChatMessage }>(`chats/${chatId}/messages`, authInit(token, { method: 'POST', body: JSON.stringify({ text }) })).then((r) => r.message), () => { const m = { _id: `local-${Date.now()}`, senderId: 'me', text: text.trim(), createdAt: new Date().toISOString() }; localMessages = [...localMessages, m]; return m; }),
-  editMessage: (token: string | null, chatId: string, messageId: string, text: string) => fallback(() => apiRequest<{ message: ChatMessage }>(`chats/${chatId}/messages/${messageId}`, authInit(token, { method: 'PATCH', body: JSON.stringify({ text }) })).then((r) => r.message), () => { localMessages = localMessages.map((m) => m._id === messageId ? { ...m, text } : m); return localMessages.find((m) => m._id === messageId)!; }),
-  deleteMessage: (token: string | null, chatId: string, messageId: string) => fallback(() => apiRequest<void>(`chats/${chatId}/messages/${messageId}`, authInit(token, { method: 'DELETE' })).then(() => undefined), () => { localMessages = localMessages.filter((m) => m._id !== messageId); }),
-  startCall: (token: string | null, donorId: string) => apiRequest<{ proxyNumber: string; expiresAt: string }>('calls/start', authInit(token, { method: 'POST', body: JSON.stringify({ donorId }) })),
+  getChat: (token: string | null, donorId: string) => fallback(() => apiRequest<{ chat: { id: string } }>('chats', authInit(token, { method: 'POST', body: JSON.stringify({ donorId }) })).then((r) => r.chat.id), () => `local-chat-${donorId || 'default'}`),
+  messages: (token: string | null, chatId: string) => fallback(() => apiRequest<{ messages: ChatMessage[] }>(`chats/${chatId}/messages`, authInit(token)).then((r) => r.messages), () => localChats.get(chatId) ?? []),
+  sendMessage: (token: string | null, chatId: string, text: string) => fallback(() => apiRequest<{ message: ChatMessage }>(`chats/${chatId}/messages`, authInit(token, { method: 'POST', body: JSON.stringify({ text }) })).then((r) => r.message), () => { const message = { _id: `local-${Date.now()}`, senderId: 'me', text: text.trim(), createdAt: new Date().toISOString() }; localChats.set(chatId, [...(localChats.get(chatId) ?? []), message]); return message; }),
+  editMessage: (token: string | null, chatId: string, messageId: string, text: string) => fallback(() => apiRequest<{ message: ChatMessage }>(`chats/${chatId}/messages/${messageId}`, authInit(token, { method: 'PATCH', body: JSON.stringify({ text }) })).then((r) => r.message), () => { const messages = (localChats.get(chatId) ?? []).map((message) => message._id === messageId ? { ...message, text } : message); localChats.set(chatId, messages); return messages.find((message) => message._id === messageId)!; }),
+  deleteMessage: (token: string | null, chatId: string, messageId: string) => fallback(() => apiRequest<void>(`chats/${chatId}/messages/${messageId}`, authInit(token, { method: 'DELETE' })).then(() => undefined), () => { localChats.set(chatId, (localChats.get(chatId) ?? []).filter((message) => message._id !== messageId)); }),
+  startCall: (token: string | null, donorId: string) => fallback(
+    () => apiRequest<{ proxyNumber: string; expiresAt: string }>('calls/start', authInit(token, { method: 'POST', body: JSON.stringify({ donorId }) })),
+    () => ({ proxyNumber: '+94110000000', expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() }),
+  ),
 };

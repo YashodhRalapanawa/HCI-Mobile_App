@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '@/theme';
@@ -20,6 +20,8 @@ export function AppHeader({
   rightElement,
 }: AppHeaderProps) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const compact = width < 430;
 
   const handleBack = () => {
     if (onBack) {
@@ -45,7 +47,7 @@ export function AppHeader({
           </TouchableOpacity>
         )}
         <View style={styles.titleContainer}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={[styles.title, compact && styles.compactTitle]} numberOfLines={1}>
             {title}
           </Text>
           {subtitle ? (
@@ -95,6 +97,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     letterSpacing: -0.3,
   },
+  compactTitle: {
+    fontSize: 16,
+  },
   subtitle: {
     fontSize: 12,
     color: colors.textMuted,
@@ -103,5 +108,6 @@ const styles = StyleSheet.create({
   },
   rightContainer: {
     marginLeft: spacing.sm,
+    flexShrink: 0,
   },
 });

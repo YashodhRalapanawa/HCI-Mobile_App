@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 
 interface BottomNavBarProps {
@@ -10,9 +11,10 @@ interface BottomNavBarProps {
 
 export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 6) }]}>
       {/* Home Tab */}
       <TouchableOpacity
         style={styles.tab}
@@ -83,7 +85,7 @@ export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    height: 64,
+    minHeight: 64,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
