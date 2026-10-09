@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -60,6 +61,8 @@ interface ScreenSwitcherProps {
 export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
   const [visible, setVisible] = useState(false);
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const compact = width < 430;
 
   const handleSelect = async (route: string) => {
     setVisible(false);
@@ -110,13 +113,25 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
   return (
     <>
       <TouchableOpacity
-        style={styles.pill}
+        style={[styles.pill, compact && styles.compactPill]}
         onPress={() => setVisible(true)}
         activeOpacity={0.8}
+        accessibilityLabel={`Open pages, screen ${currentScreenId} of ${MEMBER_1_SCREENS.length}`}
+        accessibilityRole="button"
       >
+<<<<<<< HEAD
         <Ionicons name="layers-outline" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
         <Text style={styles.pillText}>{pillText}</Text>
         <Ionicons name="chevron-down" size={13} color="#FFFFFF" style={{ marginLeft: 3 }} />
+=======
+        <Ionicons name="layers-outline" size={compact ? 18 : 14} color="#FFFFFF" style={compact ? undefined : styles.pillIcon} />
+        {!compact && (
+          <>
+            <Text style={styles.pillText}>Screen {currentScreenId}/{MEMBER_1_SCREENS.length}</Text>
+            <Ionicons name="chevron-down" size={13} color="#FFFFFF" style={styles.pillChevron} />
+          </>
+        )}
+>>>>>>> origin/Lakshani
       </TouchableOpacity>
 
       <Modal
@@ -188,10 +203,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#374151',
   },
+  compactPill: {
+    width: 38,
+    height: 38,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 19,
+    justifyContent: 'center',
+  },
+  pillIcon: {
+    marginRight: 5,
+  },
   pillText: {
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
+  },
+  pillChevron: {
+    marginLeft: 3,
   },
   modalOverlay: {
     flex: 1,

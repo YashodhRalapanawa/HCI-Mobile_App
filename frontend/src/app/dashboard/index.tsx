@@ -19,6 +19,7 @@ import { BottomNavBar } from '@/components/BottomNavBar';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { makePhoneCall } from '@/utils/phone';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface NearbyRequest {
   id: string;
@@ -70,6 +71,7 @@ const INITIAL_REQUESTS: NearbyRequest[] = [
 
 export default function DashboardScreen() {
   const router = useRouter();
+<<<<<<< HEAD
   const { user, token, isLoading } = useAuth();
 
   useEffect(() => {
@@ -81,6 +83,10 @@ export default function DashboardScreen() {
       }
     }
   }, [isLoading, token, user?.role, router]);
+=======
+  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+>>>>>>> origin/Lakshani
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<NearbyRequest | null>(null);
@@ -138,7 +144,7 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, Platform.OS === 'android' && { paddingTop: insets.top }]}>
       <View style={styles.container}>
         <ScrollView
           style={styles.scrollView}
@@ -267,7 +273,7 @@ export default function DashboardScreen() {
             {/* Find Blood Donor */}
             <TouchableOpacity
               style={styles.serviceCard}
-              onPress={() => router.push('/profile/public-preview' as any)}
+              onPress={() => router.push('/find-donors')}
               activeOpacity={0.7}
             >
               <View style={[styles.serviceIconBox, { backgroundColor: '#FEE2E2' }]}>
@@ -613,6 +619,8 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
   },
   avatar: {
     width: 44,
@@ -636,6 +644,7 @@ const styles = StyleSheet.create({
   },
   greetingContainer: {
     justifyContent: 'center',
+    flexShrink: 1,
   },
   greetingText: {
     fontSize: 12,
@@ -647,11 +656,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#111827',
     marginTop: 1,
+    flexShrink: 1,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   notificationBtn: {
     width: 40,

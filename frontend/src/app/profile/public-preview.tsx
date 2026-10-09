@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '@/theme';
 import { AppHeader } from '@/components/AppHeader';
@@ -21,18 +21,30 @@ import { makePhoneCall } from '@/utils/phone';
 export default function PublicProfilePreviewScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const params = useLocalSearchParams<{
+    donorName?: string;
+    donorBloodGroup?: string;
+    donorAvailable?: string;
+    donorEligible?: string;
+    donorDistance?: string;
+  }>();
+  const profileName = String(params.donorName ?? user?.name ?? 'Kasun Perera');
+  const profileBloodGroup = String(params.donorBloodGroup ?? user?.bloodGroup ?? 'O+');
+  const profileAvailable = params.donorAvailable ? params.donorAvailable === 'true' : (user?.isAvailable ?? true);
+  const profileEligible = params.donorEligible ? params.donorEligible === 'true' : (user?.isEligible ?? true);
+  const profileDistance = params.donorDistance ?? '2.5';
 
   const handleRequestBlood = () => {
     Alert.alert(
       'Blood Request Flow',
-      `This triggers a matching request for donor ${user?.name || 'Kasun Perera'} (${user?.bloodGroup || 'O+'}). Managed under Member 2 / Emergency Requests module.`,
+      `This triggers a matching request for donor ${profileName} (${profileBloodGroup}). Managed under Member 2 / Emergency Requests module.`,
       [{ text: 'OK' }],
     );
   };
 
   const handleCall = () => {
     const donorPhone = user?.phone || '+94 77 123 4567';
-    const donorName = user?.name || 'Verified Donor';
+    const donorName = profileName;
 
     if (Platform.OS === 'web') {
       const confirmed = typeof window !== 'undefined' ? window.confirm(`Call donor ${donorName} at ${donorPhone}?`) : true;
@@ -76,8 +88,8 @@ export default function PublicProfilePreviewScreen() {
         <View style={styles.heroCard}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {user?.name
-                ?.split(' ')
+              {profileName
+                .split(' ')
                 .map((n) => n[0])
                 .slice(0, 2)
                 .join('') || 'KP'}
@@ -87,12 +99,12 @@ export default function PublicProfilePreviewScreen() {
             </View>
           </View>
 
-          <Text style={styles.donorName}>{user?.name || 'Kasun Perera'}</Text>
+          <Text style={styles.donorName}>{profileName}</Text>
 
           <View style={styles.locationRow}>
             <Ionicons name="location" size={14} color={colors.textMuted} />
             <Text style={styles.locationText}>
-              {user?.city || 'Colombo 07'}, {user?.district || 'Colombo'} · 2.5 km away
+              {user?.city || 'Negombo'}, {user?.district || 'Gampaha'} · {profileDistance} km away
             </Text>
           </View>
 
@@ -100,28 +112,28 @@ export default function PublicProfilePreviewScreen() {
           <View style={styles.badgeRow}>
             <View style={styles.bloodBadge}>
               <Ionicons name="water" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.bloodBadgeText}>{user?.bloodGroup || 'O+'} Blood Group</Text>
+              <Text style={styles.bloodBadgeText}>{profileBloodGroup} Blood Group</Text>
             </View>
 
             <View
               style={[
                 styles.availBadge,
-                user?.isAvailable ? styles.availNow : styles.availOff,
+                profileAvailable ? styles.availNow : styles.availOff,
               ]}
             >
               <View
                 style={[
                   styles.statusDot,
-                  user?.isAvailable ? { backgroundColor: colors.success } : { backgroundColor: colors.textMuted },
+                  profileAvailable ? { backgroundColor: colors.success } : { backgroundColor: colors.textMuted },
                 ]}
               />
               <Text
                 style={[
                   styles.availBadgeText,
-                  user?.isAvailable ? { color: colors.success } : { color: colors.textMuted },
+                  profileAvailable ? { color: colors.success } : { color: colors.textMuted },
                 ]}
               >
-                {user?.isAvailable ? 'Available Now' : 'Not Available'}
+                {profileAvailable ? 'Available Now' : 'Not Available'}
               </Text>
             </View>
           </View>
@@ -148,7 +160,7 @@ export default function PublicProfilePreviewScreen() {
           <Text style={styles.cardHeading}>Medical Screening Information</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoKey}>Eligibility Status:</Text>
-            <Text style={styles.infoVal}>Verified & Ready</Text>
+            <Text style={styles.infoVal}>{profileEligible ? 'Verified & Ready' : 'Not eligible yet'}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoKey}>Gender / Weight:</Text>

@@ -2,9 +2,11 @@ import { createServer } from 'node:http';
 import { createApp } from './app.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { env } from './config/env.js';
+import { attachMember3Realtime } from './modules/member3/member3.realtime.js';
 
 const app = createApp();
 const server = createServer(app);
+attachMember3Realtime(server);
 
 async function start(): Promise<void> {
   if (env.MONGODB_URI) {

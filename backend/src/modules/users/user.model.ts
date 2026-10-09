@@ -33,6 +33,9 @@ export interface DonorBadge {
 export interface UserPreferences {
   pushNotifications: boolean;
   smsAlerts: boolean;
+  emergencyNotifications: boolean;
+  donorRequestNotifications: boolean;
+  campaignNotifications: boolean;
   locationSharing: boolean;
   isPublicDonor: boolean;
   language: 'en' | 'si' | 'ta';
@@ -164,6 +167,9 @@ const userSchema = new Schema<UserDocument>(
     preferences: {
       pushNotifications: { type: Boolean, default: true },
       smsAlerts: { type: Boolean, default: true },
+      emergencyNotifications: { type: Boolean, default: true },
+      donorRequestNotifications: { type: Boolean, default: true },
+      campaignNotifications: { type: Boolean, default: true },
       locationSharing: { type: Boolean, default: true },
       isPublicDonor: { type: Boolean, default: true },
       language: { type: String, enum: ['en', 'si', 'ta'], default: 'en' },

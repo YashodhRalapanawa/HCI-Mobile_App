@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { User } from './user.model.js';
 import { authenticate, type AuthenticatedRequest } from '../../middleware/auth.js';
 import { sanitizeUser } from '../auth/auth.routes.js';
+import { Notification, SavedSearch } from '../member3/member3.models.js';
 
 export const userRouter = Router();
 
@@ -58,9 +59,48 @@ userRouter.patch('/me', authenticate, handleUpdateProfile);
 userRouter.patch('/me/availability', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const user = req.user!;
+    const wasAvailable = user.isAvailable;
     const { isAvailable } = req.body;
     user.isAvailable = typeof isAvailable === 'boolean' ? isAvailable : !user.isAvailable;
     await user.save();
+
+    if (!wasAvailable && user.isAvailable) {
+      const compatibleGroups: Record<string, string[]> = {
+        'A+': ['A+', 'AB+'], 'A-': ['A-', 'A+', 'AB-', 'AB+'],
+        'B+': ['B+', 'AB+'], 'B-': ['B-', 'B+', 'AB-', 'AB+'],
+        'O+': ['O+', 'A+', 'B+', 'AB+'], 'O-': ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'],
+        'AB+': ['AB+'], 'AB-': ['AB-', 'AB+'],
+      };
+      const matching = await SavedSearch.find({
+        notifyWhenAvailable: true,
+        bloodGroup: { $in: compatibleGroups[user.bloodGroup] ?? [user.bloodGroup] },
+      }).lean();
+      const owners = await User.find({ _id: { $in: matching.map((search) => search.ownerId) } }).lean();
+      const ownerById = new Map(owners.map((owner) => [owner._id.toString(), owner]));
+      const distanceKm = (a?: { coordinates?: number[] }, b?: { coordinates?: number[] }) => {
+        if (!a?.coordinates || !b?.coordinates || a.coordinates.length < 2 || b.coordinates.length < 2) return null;
+        const lon1 = a.coordinates[0]!; const lat1 = a.coordinates[1]!;
+        const lon2 = b.coordinates[0]!; const lat2 = b.coordinates[1]!;
+        const radians = (value: number) => value * Math.PI / 180;
+        const dLat = radians(lat2 - lat1); const dLon = radians(lon2 - lon1);
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(radians(lat1)) * Math.cos(radians(lat2)) * Math.sin(dLon / 2) ** 2;
+        return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+      };
+      const notifications = matching
+        .filter((search) => {
+          const owner = ownerById.get(search.ownerId.toString());
+          if (!owner || (search.eligibleOnly && !user.isEligible)) return false;
+          const distance = distanceKm(owner.location, user.location);
+          return distance === null || distance <= search.radiusKm;
+        })
+        .map((search) => ({
+          recipientId: search.ownerId,
+          type: 'availability' as const,
+          title: 'A matching donor is now available',
+          details: `${user.name} is available to donate ${user.bloodGroup} blood within your saved search area.`,
+        }));
+      if (notifications.length) await Notification.insertMany(notifications);
+    }
 
     res.status(200).json({
       message: `Availability updated to ${user.isAvailable ? 'Available' : 'Unavailable'}.`,
