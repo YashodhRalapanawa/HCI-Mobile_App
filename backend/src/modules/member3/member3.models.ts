@@ -41,6 +41,8 @@ export interface MessageDocument extends Document {
   chatId: mongoose.Types.ObjectId;
   senderId: mongoose.Types.ObjectId;
   text: string;
+  deliveredAt?: Date;
+  readAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,6 +52,13 @@ export interface CallSessionDocument extends Document {
   donorId: mongoose.Types.ObjectId;
   proxyNumber: string;
   expiresAt: Date;
+  status: 'active' | 'ended' | 'expired' | 'failed';
+  endedAt?: Date;
+  report?: {
+    reason: string;
+    details?: string;
+    createdAt: Date;
+  };
   createdAt: Date;
 }
 
@@ -85,13 +94,22 @@ const messageSchema = new Schema<MessageDocument>({
   chatId: { type: Schema.Types.ObjectId, ref: 'Chat', required: true, index: true },
   senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   text: { type: String, required: true, trim: true, maxlength: 1000 },
+  deliveredAt: { type: Date },
+  readAt: { type: Date },
 }, { timestamps: true });
 
 const callSessionSchema = new Schema<CallSessionDocument>({
   callerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   donorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   proxyNumber: { type: String, required: true },
-  expiresAt: { type: Date, required: true, index: { expires: 0 } },
+  expiresAt: { type: Date, required: true, index: true },
+  status: { type: String, enum: ['active', 'ended', 'expired', 'failed'], default: 'active', index: true },
+  endedAt: { type: Date },
+  report: {
+    reason: { type: String, trim: true },
+    details: { type: String, trim: true, maxlength: 1000 },
+    createdAt: { type: Date },
+  },
 }, { timestamps: true });
 
 export const SavedSearch = (mongoose.models.SavedSearch as Model<SavedSearchDocument> | undefined) ?? mongoose.model<SavedSearchDocument>('SavedSearch', savedSearchSchema);
