@@ -279,8 +279,10 @@ export default function DashboardScreen() {
             {/* New Blood Request */}
             <TouchableOpacity
               style={styles.serviceCard}
-              onPress={() => setServiceModal('New Blood Request')}
+              onPress={() => router.push('/requests/new' as any)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="New Blood Request"
             >
               <View style={[styles.serviceIconBox, { backgroundColor: '#E0F2FE' }]}>
                 <Ionicons name="water" size={20} color="#0284C7" />
@@ -553,7 +555,7 @@ export default function DashboardScreen() {
                       style={styles.acceptBtn}
                       onPress={() => {
                         setServiceModal(null);
-                        Alert.alert('Emergency Request Form', 'Connecting with Member 2 Emergency Request pipeline.');
+                        router.push('/requests/new' as any);
                       }}
                     >
                       <Text style={styles.acceptBtnText}>Create Emergency Request</Text>
