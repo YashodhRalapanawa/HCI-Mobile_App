@@ -1,8 +1,9 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '@/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface AppHeaderProps {
   title: string;
@@ -21,6 +22,7 @@ export function AppHeader({
 }: AppHeaderProps) {
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const compact = width < 430;
 
   const handleBack = () => {
@@ -34,7 +36,7 @@ export function AppHeader({
   };
 
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, Platform.OS === 'android' && { paddingTop: insets.top + spacing.xs }]}>
       <View style={styles.leftContainer}>
         {showBack && (
           <TouchableOpacity

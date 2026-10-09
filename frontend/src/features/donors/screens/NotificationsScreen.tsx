@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -65,15 +65,18 @@ export default function NotificationsScreen() {
   const [preferencesVisible, setPreferencesVisible] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const stored = await AsyncStorage.getItem(preferenceKey);
     if (stored) setPreferences({ ...defaultPreferences, ...JSON.parse(stored) });
     setItems(await donorService.listNotifications(token));
-  };
+  }, [token]);
 
   useEffect(() => {
-    void load();
-  }, [token]);
+    const loadNotifications = async () => {
+      await load();
+    };
+    void loadNotifications();
+  }, [load]);
 
   const refresh = async () => {
     setRefreshing(true);

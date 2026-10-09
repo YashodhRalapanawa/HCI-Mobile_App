@@ -19,6 +19,7 @@ import { BottomNavBar } from '@/components/BottomNavBar';
 import { ScreenSwitcher } from '@/components/ScreenSwitcherModal';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { makePhoneCall } from '@/utils/phone';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface NearbyRequest {
   id: string;
@@ -71,6 +72,7 @@ const INITIAL_REQUESTS: NearbyRequest[] = [
 export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<NearbyRequest | null>(null);
@@ -128,7 +130,7 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, Platform.OS === 'android' && { paddingTop: insets.top }]}>
       <View style={styles.container}>
         <ScrollView
           style={styles.scrollView}
