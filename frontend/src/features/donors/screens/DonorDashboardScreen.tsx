@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -133,12 +133,16 @@ export function DonorDashboardScreen() {
   const [isSessionExpired, setIsSessionExpired] = useState(false);
   const [isForbidden, setIsForbidden] = useState(false);
 
+  const requestSeqRef = useRef(0);
+
   const fetchRequests = useCallback(
     async (pageToFetch = 1, isRefreshAction = false) => {
       // In isolated dev preview mode, render preview fixtures without API calls
       if (isPreview) {
         return;
       }
+
+      const currentSeq = ++requestSeqRef.current;
 
       if (isRefreshAction) {
         setIsRefreshing(true);
@@ -156,6 +160,7 @@ export function DonorDashboardScreen() {
         setIsRefreshing(false);
         setIsLoadingMore(false);
         setIsSessionExpired(true);
+        setRequests([]);
         return;
       }
 
@@ -165,11 +170,14 @@ export function DonorDashboardScreen() {
         setIsRefreshing(false);
         setIsLoadingMore(false);
         setIsForbidden(true);
+        setRequests([]);
         return;
       }
 
       try {
         const response = await donationRequestApi.getPublishedRequests(token, pageToFetch, 10);
+        if (currentSeq !== requestSeqRef.current) return;
+
         setIsSessionExpired(false);
         setIsForbidden(false);
 
@@ -185,18 +193,24 @@ export function DonorDashboardScreen() {
 
         setPagination(response.pagination);
       } catch (err: any) {
+        if (currentSeq !== requestSeqRef.current) return;
+
         const status = err?.status;
         if (status === 401) {
           setIsSessionExpired(true);
+          setRequests([]);
         } else if (status === 403) {
           setIsForbidden(true);
+          setRequests([]);
         } else {
           setErrorMessage(err?.message || 'Unable to load donation requests. Please try again.');
         }
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
-        setIsLoadingMore(false);
+        if (currentSeq === requestSeqRef.current) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+          setIsLoadingMore(false);
+        }
       }
     },
     [isPreview, token, user],

@@ -115,3 +115,90 @@ export interface AssignDeliveryPayload {
   expectedAssignmentId?: string;
   confirmReassignment?: boolean;
 }
+
+export type AdminDonationStatusFilter = 'all' | 'draft' | 'published' | 'closed';
+
+export interface AdminDonationRequestItem {
+  id: string;
+  bloodGroup: string;
+  unitsRequired: number;
+  hospitalId: string;
+  hospitalName: string;
+  locationDescription: string;
+  urgency: 'Urgent' | 'Scheduled';
+  neededBy?: string | null;
+  status: 'draft' | 'published' | 'closed';
+  publishedAt?: string | null;
+  closedAt?: string | null;
+  responseCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminDonationRequestDetail extends AdminDonationRequestItem {
+  createdByAdmin?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
+
+export interface AdminDonationRequestsCounts {
+  draft: number;
+  published: number;
+  closed: number;
+}
+
+export interface AdminDonationRequestsPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+}
+
+export interface AdminDonationRequestsResponse {
+  requests: AdminDonationRequestItem[];
+  pagination: AdminDonationRequestsPagination;
+  counts: AdminDonationRequestsCounts;
+}
+
+export interface CreateDonationRequestPayload {
+  bloodGroup: string;
+  unitsRequired: number;
+  hospitalId: string;
+  locationDescription: string;
+  urgency: 'Urgent' | 'Scheduled';
+  neededBy?: string | null;
+}
+
+export interface UpdateDonationRequestPayload {
+  bloodGroup?: string;
+  unitsRequired?: number;
+  hospitalId?: string;
+  locationDescription?: string;
+  urgency?: 'Urgent' | 'Scheduled';
+  neededBy?: string | null;
+  expectedUpdatedAt?: string;
+}
+
+export interface AdminDonorResponseItem {
+  responseId: string;
+  donorId: string;
+  donorName: string;
+  donorBloodGroup: string | null;
+  donorDistrict: string | null;
+  status: 'willing_to_donate';
+  acceptedAt: string;
+}
+
+export interface AdminDonorResponsesResponse {
+  responses: AdminDonorResponseItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+  };
+}

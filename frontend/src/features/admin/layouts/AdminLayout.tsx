@@ -39,8 +39,10 @@ export function AdminLayout({ children, isPreview = false }: AdminLayoutProps) {
   const adminName = user?.name || (isPreview ? 'Preview Administrator' : 'Administrator');
   const adminEmail = user?.email || (isPreview ? 'admin@lifeline.lk' : '');
 
+  const isDonationRequestsActive = pathname?.includes('/admin/donation-requests') || false;
   const isPatientRequestsActive = pathname?.includes('/admin/patient-requests') || false;
-  const isDashboardActive = !isPatientRequestsActive && (pathname === '/admin' || pathname === '/admin/');
+  const isDashboardActive =
+    !isPatientRequestsActive && !isDonationRequestsActive && (pathname === '/admin' || pathname === '/admin/');
 
   const navItems: NavItem[] = [
     {
@@ -64,9 +66,8 @@ export function AdminLayout({ children, isPreview = false }: AdminLayoutProps) {
       label: 'Donation Requests',
       icon: 'water-outline',
       route: '/admin/donation-requests',
-      isActive: false,
-      isDisabled: true,
-      badge: 'Not available yet',
+      isActive: isDonationRequestsActive,
+      isDisabled: false,
     },
     {
       id: 'reports',

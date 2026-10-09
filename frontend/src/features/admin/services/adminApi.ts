@@ -5,6 +5,12 @@ import type {
   AdminPatientRequestDetail,
   AdminRequestStatusFilter,
   AssignDeliveryPayload,
+  AdminDonationRequestsResponse,
+  AdminDonationRequestDetail,
+  AdminDonationStatusFilter,
+  CreateDonationRequestPayload,
+  UpdateDonationRequestPayload,
+  AdminDonorResponsesResponse,
 } from '../types';
 
 export const adminApi = {
@@ -166,5 +172,150 @@ export const adminApi = {
         body: JSON.stringify(payload),
       },
     );
+  },
+
+  /**
+   * Fetches paginated donation requests with search and status filtering.
+   */
+  getDonationRequests: async (
+    token: string,
+    params: {
+      search?: string;
+      status?: AdminDonationStatusFilter;
+      page?: number;
+      limit?: number;
+    } = {},
+  ): Promise<AdminDonationRequestsResponse> => {
+    const query = new URLSearchParams();
+    if (params.search) query.append('search', params.search);
+    if (params.status && params.status !== 'all') query.append('status', params.status);
+    if (params.page) query.append('page', String(params.page));
+    if (params.limit) query.append('limit', String(params.limit));
+
+    const path = `admin/donation-requests${query.toString() ? `?${query.toString()}` : ''}`;
+    return apiRequest<AdminDonationRequestsResponse>(path, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  },
+
+  /**
+   * Fetches full review detail for a specific donation request.
+   */
+  getDonationRequestById: async (
+    token: string,
+    id: string,
+  ): Promise<{ request: AdminDonationRequestDetail }> => {
+    return apiRequest<{ request: AdminDonationRequestDetail }>(
+      `admin/donation-requests/${encodeURIComponent(id)}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+  },
+
+  /**
+   * Creates a new donation request as a draft.
+   */
+  createDonationRequest: async (
+    token: string,
+    payload: CreateDonationRequestPayload,
+  ): Promise<{ message: string; request: AdminDonationRequestDetail }> => {
+    return apiRequest<{ message: string; request: AdminDonationRequestDetail }>(
+      'admin/donation-requests',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  /**
+   * Updates an existing draft donation request.
+   */
+  updateDonationRequest: async (
+    token: string,
+    id: string,
+    payload: UpdateDonationRequestPayload,
+  ): Promise<{ message: string; request: AdminDonationRequestDetail }> => {
+    return apiRequest<{ message: string; request: AdminDonationRequestDetail }>(
+      `admin/donation-requests/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  /**
+   * Publishes an existing draft donation request.
+   */
+  publishDonationRequest: async (
+    token: string,
+    id: string,
+    expectedUpdatedAt?: string,
+  ): Promise<{ message: string; request: AdminDonationRequestDetail }> => {
+    return apiRequest<{ message: string; request: AdminDonationRequestDetail }>(
+      `admin/donation-requests/${encodeURIComponent(id)}/publish`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ expectedUpdatedAt }),
+      },
+    );
+  },
+
+  /**
+   * Closes an active published donation request.
+   */
+  closeDonationRequest: async (
+    token: string,
+    id: string,
+    expectedUpdatedAt?: string,
+  ): Promise<{ message: string; request: AdminDonationRequestDetail }> => {
+    return apiRequest<{ message: string; request: AdminDonationRequestDetail }>(
+      `admin/donation-requests/${encodeURIComponent(id)}/close`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ expectedUpdatedAt }),
+      },
+    );
+  },
+
+  /**
+   * Fetches paginated donor responses for a donation request.
+   */
+  getDonationRequestResponses: async (
+    token: string,
+    id: string,
+    params: { page?: number; limit?: number } = {},
+  ): Promise<AdminDonorResponsesResponse> => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', String(params.page));
+    if (params.limit) query.append('limit', String(params.limit));
+
+    const path = `admin/donation-requests/${encodeURIComponent(id)}/responses${query.toString() ? `?${query.toString()}` : ''}`;
+    return apiRequest<AdminDonorResponsesResponse>(path, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
   },
 };
