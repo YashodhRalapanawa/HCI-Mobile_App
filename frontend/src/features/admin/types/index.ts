@@ -202,3 +202,70 @@ export interface AdminDonorResponsesResponse {
     hasNextPage: boolean;
   };
 }
+
+export type AdminRequestLifecycleStatus =
+  | 'pending_verification'
+  | 'verified'
+  | 'in_progress'
+  | 'fulfilled'
+  | 'cancelled'
+  | 'rejected';
+
+export interface AdminReportData {
+  reportTitle: string;
+  appliedRange: {
+    from: string;
+    to: string;
+    timezone: string;
+    startUtcIso: string;
+    endExclusiveUtcIso: string;
+  };
+  generatedAt: string;
+  generatedAtColombo: string;
+  metrics: {
+    patientRequests: {
+      totalCreated: number;
+      statusBreakdown: Record<AdminRequestLifecycleStatus, number>;
+      byHospital: {
+        hospitalId: string;
+        hospitalName: string;
+        count: number;
+        unitsRequired: number;
+      }[];
+      byBloodGroup: Record<string, { count: number; unitsRequired: number }>;
+    };
+    deliveryArrivals: {
+      confirmedCount: number;
+    };
+    donationInvitations: {
+      createdCount: number;
+      publishedCount: number;
+      createdStatusBreakdown: {
+        draft: number;
+        published: number;
+        closed: number;
+      };
+    };
+    donorWillingness: {
+      acceptedOffersCount: number;
+      uniqueRespondingDonors: number;
+    };
+    registeredAccounts: {
+      recipientAccountsCount: number;
+      donorAccountsCount: number;
+    };
+  };
+  notes: {
+    patientRequestsNote: string;
+    deliveryArrivalsNote: string;
+    donationInvitationsNote: string;
+    donorWillingnessNote: string;
+    registeredAccountsNote: string;
+    generalDisclaimer: string;
+  };
+  signature: string;
+}
+
+export interface AdminReportResponse {
+  report: AdminReportData;
+}

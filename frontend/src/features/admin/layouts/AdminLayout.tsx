@@ -41,8 +41,12 @@ export function AdminLayout({ children, isPreview = false }: AdminLayoutProps) {
 
   const isDonationRequestsActive = pathname?.includes('/admin/donation-requests') || false;
   const isPatientRequestsActive = pathname?.includes('/admin/patient-requests') || false;
+  const isReportsActive = pathname?.includes('/admin/reports') || false;
   const isDashboardActive =
-    !isPatientRequestsActive && !isDonationRequestsActive && (pathname === '/admin' || pathname === '/admin/');
+    !isPatientRequestsActive &&
+    !isDonationRequestsActive &&
+    !isReportsActive &&
+    (pathname === '/admin' || pathname === '/admin/');
 
   const navItems: NavItem[] = [
     {
@@ -74,9 +78,8 @@ export function AdminLayout({ children, isPreview = false }: AdminLayoutProps) {
       label: 'Reports',
       icon: 'document-text-outline',
       route: '/admin/reports',
-      isActive: false,
-      isDisabled: true,
-      badge: 'Not available yet',
+      isActive: isReportsActive,
+      isDisabled: false,
     },
   ];
 
