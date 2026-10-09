@@ -16,6 +16,11 @@ export interface DonationRequestDocument extends Document {
   publishedAt?: Date | null;
   closedAt?: Date | null;
   /**
+   * Meaningful internal response counter coordinating atomic concurrency
+   * between donor acceptance and administrative request closure.
+   */
+  responseCount: number;
+  /**
    * Internal reference linking this invitation to a hospital/patient BloodRequest.
    * Kept private on the server; never exposed to donor client lists.
    */
@@ -82,6 +87,12 @@ const donationRequestSchema = new Schema<DonationRequestDocument>(
     closedAt: {
       type: Date,
       default: null,
+    },
+    responseCount: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
     },
     internalRequestId: {
       type: Schema.Types.ObjectId,

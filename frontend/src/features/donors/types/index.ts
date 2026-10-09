@@ -1,4 +1,4 @@
-export type DonationRequestUrgency = 'low' | 'medium' | 'high' | 'critical';
+export type DonationRequestUrgency = 'Urgent' | 'Scheduled';
 export type DonationRequestStatus = 'draft' | 'published' | 'closed';
 
 export interface DonationRequestItem {
@@ -26,4 +26,23 @@ export interface DonationRequestsPagination {
 export interface DonationRequestsResponse {
   requests: DonationRequestItem[];
   pagination: DonationRequestsPagination;
+}
+
+export interface DonationResponseDto {
+  status: 'accepted';
+  acceptedAt: string;
+}
+
+export interface DonationRequestDetailItem extends DonationRequestItem {
+  isAvailable: boolean;
+  donorResponse: DonationResponseDto | null;
+}
+
+export interface DonationRequestDetailResponse {
+  request: DonationRequestDetailItem;
+}
+
+export interface DonationAcceptResponse {
+  message: string;
+  donorResponse: DonationResponseDto;
 }

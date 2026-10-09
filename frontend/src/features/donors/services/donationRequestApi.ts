@@ -1,5 +1,9 @@
 import { apiRequest } from '@/services/api';
-import type { DonationRequestsResponse } from '../types';
+import type {
+  DonationAcceptResponse,
+  DonationRequestDetailResponse,
+  DonationRequestsResponse,
+} from '../types';
 
 export const donationRequestApi = {
   /**
@@ -18,6 +22,38 @@ export const donationRequestApi = {
 
     return apiRequest<DonationRequestsResponse>(`donation-requests?${query}`, {
       method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  },
+
+  /**
+   * Fetches the details of a single donation request including current donor's response.
+   * Requires authenticated donor bearer token.
+   */
+  getRequestDetails: async (
+    token: string,
+    id: string,
+  ): Promise<DonationRequestDetailResponse> => {
+    return apiRequest<DonationRequestDetailResponse>(`donation-requests/${id}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  },
+
+  /**
+   * Records the donor's willingness to donate for a published request ("I CAN DONATE").
+   * Server derives donor identity and timestamp.
+   */
+  acceptDonationRequest: async (
+    token: string,
+    id: string,
+  ): Promise<DonationAcceptResponse> => {
+    return apiRequest<DonationAcceptResponse>(`donation-requests/${id}/accept`, {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
       },

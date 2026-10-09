@@ -18,7 +18,7 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 import { donationRequestApi } from '../services/donationRequestApi';
 import type { DonationRequestItem, DonationRequestsPagination, DonationRequestUrgency } from '../types';
 
-const SAMPLE_PREVIEW_REQUESTS: DonationRequestItem[] = [
+export const SAMPLE_PREVIEW_REQUESTS: DonationRequestItem[] = [
   {
     id: 'preview-req-1',
     bloodGroup: 'O-',
@@ -26,7 +26,7 @@ const SAMPLE_PREVIEW_REQUESTS: DonationRequestItem[] = [
     hospitalId: 'hosp-1',
     hospitalName: 'National Blood Transfusion Service',
     locationDescription: 'Narahenpita, Colombo 05 — Main Blood Bank Donor Center',
-    urgency: 'critical',
+    urgency: 'Urgent',
     neededBy: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
     status: 'published',
     publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
@@ -39,7 +39,7 @@ const SAMPLE_PREVIEW_REQUESTS: DonationRequestItem[] = [
     hospitalId: 'hosp-2',
     hospitalName: 'Colombo National Hospital',
     locationDescription: 'Regent Street, Colombo 08 — Emergency Ward Intake',
-    urgency: 'high',
+    urgency: 'Urgent',
     neededBy: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
     status: 'published',
     publishedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
@@ -52,7 +52,7 @@ const SAMPLE_PREVIEW_REQUESTS: DonationRequestItem[] = [
     hospitalId: 'hosp-3',
     hospitalName: 'Lady Ridgeway Hospital for Children',
     locationDescription: 'Borella, Colombo 08 — Pediatric Hematology Unit',
-    urgency: 'medium',
+    urgency: 'Scheduled',
     neededBy: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     status: 'published',
     publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
@@ -65,7 +65,7 @@ const SAMPLE_PREVIEW_REQUESTS: DonationRequestItem[] = [
     hospitalId: 'hosp-4',
     hospitalName: 'Teaching Hospital Karapitiya',
     locationDescription: 'Galle — Blood Bank Counter 2',
-    urgency: 'low',
+    urgency: 'Scheduled',
     neededBy: null,
     status: 'published',
     publishedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
@@ -88,38 +88,21 @@ function formatNeededByDate(dateStr: string | null): string | null {
   }
 }
 
-function getUrgencyBadgeConfig(urgency: DonationRequestUrgency) {
-  switch (urgency) {
-    case 'critical':
-      return {
-        label: 'Critical Urgency',
-        bgColor: colors.dangerSoft,
-        textColor: colors.danger,
-        borderColor: '#FECACA',
-      };
-    case 'high':
-      return {
-        label: 'High Urgency',
-        bgColor: colors.warningSoft,
-        textColor: colors.tertiaryDark,
-        borderColor: '#FDE68A',
-      };
-    case 'medium':
-      return {
-        label: 'Medium Urgency',
-        bgColor: colors.infoSoft,
-        textColor: colors.info,
-        borderColor: '#BFDBFE',
-      };
-    case 'low':
-    default:
-      return {
-        label: 'Standard Urgency',
-        bgColor: '#F1F5F9',
-        textColor: colors.textSecondary,
-        borderColor: '#E2E8F0',
-      };
+function getUrgencyBadgeConfig(urgency: DonationRequestUrgency | string) {
+  if (urgency === 'Urgent') {
+    return {
+      label: 'Urgent',
+      bgColor: colors.dangerSoft,
+      textColor: colors.danger,
+      borderColor: '#FECACA',
+    };
   }
+  return {
+    label: 'Scheduled',
+    bgColor: colors.infoSoft,
+    textColor: colors.info,
+    borderColor: '#BFDBFE',
+  };
 }
 
 export function DonorDashboardScreen() {
@@ -444,6 +427,23 @@ export function DonorDashboardScreen() {
                         </View>
                       )}
                     </View>
+
+                    {/* CARD ACTION: VIEW DETAILS */}
+                    <View style={styles.cardActionRow}>
+                      <TouchableOpacity
+                        style={styles.viewDetailsButton}
+                        onPress={() => {
+                          const path = `/donor/requests/${item.id}${isPreview ? '?preview=1' : ''}`;
+                          router.push(path as any);
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View details for ${item.hospitalName}`}
+                      >
+                        <Text style={styles.viewDetailsText}>VIEW DETAILS</Text>
+                        <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
               })}
@@ -725,5 +725,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
+  },
+  cardActionRow: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    alignItems: 'flex-end',
+  },
+  viewDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primaryTonal,
+  },
+  viewDetailsText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 0.5,
   },
 });
