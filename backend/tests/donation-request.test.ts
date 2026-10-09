@@ -28,9 +28,11 @@ test('Donation Requests API Integration (Member 3.1 & 3.2)', async (t) => {
     donorUserId?: string;
     donor2UserId?: string;
     recipientUserId?: string;
+    extraUserIds: mongoose.Types.ObjectId[];
     requestIds: mongoose.Types.ObjectId[];
     responseIds: mongoose.Types.ObjectId[];
   } = {
+    extraUserIds: [],
     requestIds: [],
     responseIds: [],
   };
@@ -625,6 +627,333 @@ test('Donation Requests API Integration (Member 3.1 & 3.2)', async (t) => {
         assert.equal(finalReqRace?.responseCount, 0);
       }
     });
+
+    await t.test('GET /api/donation-requests/my-accepted enforces auth, role, and static precedence', async () => {
+      // 1. Unauthenticated -> 401
+      const noAuthRes = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted`);
+      assert.equal(noAuthRes.status, 401);
+
+      // 2. Non-donor role (recipient) -> 403
+      const recipientUser = await User.findById(testIds.recipientUserId);
+      assert.ok(recipientUser);
+      const recipientToken = jwt.sign({ id: recipientUser._id.toString() }, jwtSecret, { expiresIn: '1h' });
+
+      const recipientRes = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted`, {
+        headers: { Authorization: `Bearer ${recipientToken}` },
+      });
+      assert.equal(recipientRes.status, 403);
+      const recipientBody = (await recipientRes.json()) as { message: string };
+      assert.ok(recipientBody.message.includes('registered blood donors'));
+
+      // 3. Static route precedence: Ensure /my-accepted is NOT matched by /:id (which returns 400 invalid ObjectId)
+      const donorUser = await User.findById(testIds.donorUserId);
+      assert.ok(donorUser);
+      const donorToken = jwt.sign({ id: donorUser._id.toString() }, jwtSecret, { expiresIn: '1h' });
+
+      const validDonorRes = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted`, {
+        headers: { Authorization: `Bearer ${donorToken}` },
+      });
+      assert.notEqual(validDonorRes.status, 400);
+      assert.equal(validDonorRes.status, 200);
+    });
+
+    await t.test('GET /api/donation-requests/my-accepted enforces strict donor isolation, pagination, and deterministic ordering', async () => {
+      const iso1 = await User.create({
+        name: 'Isolated Donor 1',
+        email: `iso1-${Date.now()}@test.com`,
+        phone: '0771112233',
+        passwordHash: 'hashed_pw_test',
+        bloodGroup: 'O+',
+        role: 'donor',
+        district: 'Colombo',
+        isAvailable: true,
+      });
+      testIds.extraUserIds.push(iso1._id);
+
+      const iso2 = await User.create({
+        name: 'Isolated Donor 2',
+        email: `iso2-${Date.now()}@test.com`,
+        phone: '0771112244',
+        passwordHash: 'hashed_pw_test',
+        bloodGroup: 'A+',
+        role: 'donor',
+        district: 'Colombo',
+        isAvailable: true,
+      });
+      testIds.extraUserIds.push(iso2._id);
+
+      const donor1Token = jwt.sign({ id: iso1._id.toString() }, jwtSecret, { expiresIn: '1h' });
+      const donor2Token = jwt.sign({ id: iso2._id.toString() }, jwtSecret, { expiresIn: '1h' });
+
+      // Create 3 requests for Donor 1 and 1 request for Donor 2
+      const reqA = await DonationRequest.create({
+        bloodGroup: 'A+',
+        unitsRequired: 2,
+        hospitalId: 'hosp-iso-1',
+        hospitalName: 'Hospital A',
+        locationDescription: 'Location A',
+        urgency: 'Urgent',
+        status: 'published',
+        publishedAt: new Date(),
+      });
+      testIds.requestIds.push(reqA._id);
+
+      const reqB = await DonationRequest.create({
+        bloodGroup: 'B+',
+        unitsRequired: 3,
+        hospitalId: 'hosp-iso-2',
+        hospitalName: 'Hospital B',
+        locationDescription: 'Location B',
+        urgency: 'Scheduled',
+        status: 'published',
+        publishedAt: new Date(),
+      });
+      testIds.requestIds.push(reqB._id);
+
+      const reqC = await DonationRequest.create({
+        bloodGroup: 'O-',
+        unitsRequired: 1,
+        hospitalId: 'hosp-iso-3',
+        hospitalName: 'Hospital C',
+        locationDescription: 'Location C',
+        urgency: 'Urgent',
+        status: 'published',
+        publishedAt: new Date(),
+      });
+      testIds.requestIds.push(reqC._id);
+
+      // Donor 1 responses at distinct timestamps
+      const t1 = new Date(Date.now() - 30000);
+      const t2 = new Date(Date.now() - 20000);
+      const t3 = new Date(Date.now() - 10000);
+
+      const resp1A = await DonationResponse.create({
+        donationRequestId: reqA._id,
+        donorId: iso1._id,
+        acceptedAt: t1,
+      });
+      testIds.responseIds.push(resp1A._id);
+
+      const resp1B = await DonationResponse.create({
+        donationRequestId: reqB._id,
+        donorId: iso1._id,
+        acceptedAt: t2,
+      });
+      testIds.responseIds.push(resp1B._id);
+
+      const resp1C = await DonationResponse.create({
+        donationRequestId: reqC._id,
+        donorId: iso1._id,
+        acceptedAt: t3,
+      });
+      testIds.responseIds.push(resp1C._id);
+
+      // Donor 2 response for reqA only
+      const resp2A = await DonationResponse.create({
+        donationRequestId: reqA._id,
+        donorId: iso2._id,
+        acceptedAt: new Date(),
+      });
+      testIds.responseIds.push(resp2A._id);
+
+      // 1. Pagination input validation
+      const badPageRes = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted?page=0`, {
+        headers: { Authorization: `Bearer ${donor1Token}` },
+      });
+      assert.equal(badPageRes.status, 400);
+
+      const badLimitRes = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted?limit=100`, {
+        headers: { Authorization: `Bearer ${donor1Token}` },
+      });
+      assert.equal(badLimitRes.status, 400);
+
+      // 2. Donor 1 query: must see exactly their responses ordered by acceptedAt descending (t3, t2, t1)
+      const donor1Res = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted?page=1&limit=2`, {
+        headers: { Authorization: `Bearer ${donor1Token}` },
+      });
+      assert.equal(donor1Res.status, 200);
+      const donor1Body = (await donor1Res.json()) as {
+        acceptedRequests: Array<{
+          responseId: string;
+          donationRequestId: string;
+          bloodGroup: string | null;
+          hospitalName: string;
+          acceptedAt: string;
+          availability: string;
+          canViewDetails: boolean;
+        }>;
+        pagination: { page: number; limit: number; total: number; totalPages: number; hasNextPage: boolean };
+      };
+
+      assert.equal(donor1Body.pagination.limit, 2);
+      assert.equal(donor1Body.pagination.total, 3);
+      assert.equal(donor1Body.pagination.hasNextPage, true);
+      assert.equal(donor1Body.acceptedRequests.length, 2);
+      // Newest acceptedAt first
+      assert.equal(donor1Body.acceptedRequests[0].donationRequestId, reqC._id.toString());
+      assert.equal(donor1Body.acceptedRequests[1].donationRequestId, reqB._id.toString());
+
+      // Query page 2
+      const donor1Page2Res = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted?page=2&limit=2`, {
+        headers: { Authorization: `Bearer ${donor1Token}` },
+      });
+      assert.equal(donor1Page2Res.status, 200);
+      const donor1Page2Body = (await donor1Page2Res.json()) as {
+        acceptedRequests: Array<{ donationRequestId: string }>;
+        pagination: { page: number; hasNextPage: boolean };
+      };
+      assert.equal(donor1Page2Body.pagination.page, 2);
+      assert.equal(donor1Page2Body.pagination.hasNextPage, false);
+      assert.equal(donor1Page2Body.acceptedRequests.length, 1);
+      assert.equal(donor1Page2Body.acceptedRequests[0].donationRequestId, reqA._id.toString());
+
+      // 3. Strict Donor Isolation: Donor 2 must ONLY see Donor 2's response, never Donor 1's
+      const donor2Res = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted`, {
+        headers: { Authorization: `Bearer ${donor2Token}` },
+      });
+      assert.equal(donor2Res.status, 200);
+      const donor2Body = (await donor2Res.json()) as {
+        acceptedRequests: Array<{
+          responseId: string;
+          donationRequestId: string;
+          hospitalName: string;
+        }>;
+        pagination: { total: number };
+      };
+
+      assert.equal(donor2Body.pagination.total, 1);
+      assert.equal(donor2Body.acceptedRequests.length, 1);
+      assert.equal(donor2Body.acceptedRequests[0].responseId, resp2A._id.toString());
+      assert.equal(donor2Body.acceptedRequests[0].donationRequestId, reqA._id.toString());
+    });
+
+    await t.test('GET /api/donation-requests/my-accepted preserves historical closed/expired responses and handles missing/draft safely without mutating data', async () => {
+      const donor1User = await User.findById(testIds.donorUserId);
+      assert.ok(donor1User);
+      const donor1Token = jwt.sign({ id: donor1User._id.toString() }, jwtSecret, { expiresIn: '1h' });
+
+      // Request that was closed by admin
+      const closedReq = await DonationRequest.create({
+        bloodGroup: 'AB+',
+        unitsRequired: 2,
+        hospitalId: 'hosp-hist-1',
+        hospitalName: 'Closed Hospital',
+        locationDescription: 'Closed Location',
+        urgency: 'Scheduled',
+        status: 'closed',
+        closedAt: new Date(),
+        responseCount: 1,
+      });
+      testIds.requestIds.push(closedReq._id);
+
+      const respClosed = await DonationResponse.create({
+        donationRequestId: closedReq._id,
+        donorId: donor1User._id,
+        acceptedAt: new Date(Date.now() - 5000),
+      });
+      testIds.responseIds.push(respClosed._id);
+
+      // Request that is past neededBy deadline (expired)
+      const expiredReq = await DonationRequest.create({
+        bloodGroup: 'O+',
+        unitsRequired: 1,
+        hospitalId: 'hosp-hist-2',
+        hospitalName: 'Expired Hospital',
+        locationDescription: 'Expired Location',
+        urgency: 'Urgent',
+        neededBy: new Date(Date.now() - 100000),
+        status: 'published',
+        responseCount: 1,
+      });
+      testIds.requestIds.push(expiredReq._id);
+
+      const respExpired = await DonationResponse.create({
+        donationRequestId: expiredReq._id,
+        donorId: donor1User._id,
+        acceptedAt: new Date(Date.now() - 4000),
+      });
+      testIds.responseIds.push(respExpired._id);
+
+      // Request that is draft (e.g. reverted or draft request)
+      const draftReq = await DonationRequest.create({
+        bloodGroup: 'B-',
+        unitsRequired: 1,
+        hospitalId: 'hosp-hist-3',
+        hospitalName: 'Draft Hospital',
+        locationDescription: 'Draft Location',
+        urgency: 'Scheduled',
+        status: 'draft',
+      });
+      testIds.requestIds.push(draftReq._id);
+
+      const respDraft = await DonationResponse.create({
+        donationRequestId: draftReq._id,
+        donorId: donor1User._id,
+        acceptedAt: new Date(Date.now() - 3000),
+      });
+      testIds.responseIds.push(respDraft._id);
+
+      // Response referencing a non-existent / deleted request
+      const nonExistentReqId = new mongoose.Types.ObjectId();
+      const respDeleted = await DonationResponse.create({
+        donationRequestId: nonExistentReqId,
+        donorId: donor1User._id,
+        acceptedAt: new Date(Date.now() - 2000),
+      });
+      testIds.responseIds.push(respDeleted._id);
+
+      // Call GET /my-accepted
+      const res = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted?limit=50`, {
+        headers: { Authorization: `Bearer ${donor1Token}` },
+      });
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as {
+        acceptedRequests: Array<{
+          responseId: string;
+          donationRequestId: string;
+          bloodGroup: string | null;
+          hospitalName: string;
+          availability: 'open' | 'closed' | 'expired' | 'unavailable';
+          canViewDetails: boolean;
+        }>;
+      };
+
+      // Check closed request item:
+      const closedItem = body.acceptedRequests.find((r) => r.donationRequestId === closedReq._id.toString());
+      assert.ok(closedItem);
+      assert.equal(closedItem.availability, 'closed');
+      assert.equal(closedItem.canViewDetails, true);
+      assert.equal(closedItem.hospitalName, 'Closed Hospital');
+
+      // Check expired request item:
+      const expiredItem = body.acceptedRequests.find((r) => r.donationRequestId === expiredReq._id.toString());
+      assert.ok(expiredItem);
+      assert.equal(expiredItem.availability, 'expired');
+      assert.equal(expiredItem.canViewDetails, true);
+      assert.equal(expiredItem.hospitalName, 'Expired Hospital');
+
+      // Check draft request item: minimal unavailable placeholder without exposing draft info
+      const draftItem = body.acceptedRequests.find((r) => r.donationRequestId === draftReq._id.toString());
+      assert.ok(draftItem);
+      assert.equal(draftItem.availability, 'unavailable');
+      assert.equal(draftItem.canViewDetails, false);
+      assert.equal(draftItem.hospitalName, 'Information unavailable');
+      assert.equal(draftItem.bloodGroup, null);
+
+      // Check deleted request item: minimal unavailable placeholder
+      const deletedItem = body.acceptedRequests.find((r) => r.donationRequestId === nonExistentReqId.toString());
+      assert.ok(deletedItem);
+      assert.equal(deletedItem.availability, 'unavailable');
+      assert.equal(deletedItem.canViewDetails, false);
+      assert.equal(deletedItem.hospitalName, 'Information unavailable');
+      assert.equal(deletedItem.bloodGroup, null);
+
+      // Verify read-only: counts, status, and units must NOT be changed
+      const closedCheck = await DonationRequest.findById(closedReq._id);
+      assert.equal(closedCheck?.responseCount, 1);
+      assert.equal(closedCheck?.status, 'closed');
+      assert.equal(closedCheck?.unitsRequired, 2);
+    });
   } finally {
     // Clean up all test fixtures
     for (const respId of testIds.responseIds) {
@@ -641,6 +970,9 @@ test('Donation Requests API Integration (Member 3.1 & 3.2)', async (t) => {
     }
     if (testIds.recipientUserId) {
       await User.findByIdAndDelete(testIds.recipientUserId);
+    }
+    for (const extraId of testIds.extraUserIds) {
+      await User.findByIdAndDelete(extraId);
     }
     server.close();
     await mongoose.disconnect();

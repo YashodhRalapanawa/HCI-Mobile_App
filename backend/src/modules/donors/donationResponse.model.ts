@@ -53,6 +53,9 @@ const donationResponseSchema = new Schema<DonationResponseDocument>(
 // Enforce compound uniqueness so one donor can only submit one response per donation request
 donationResponseSchema.index({ donationRequestId: 1, donorId: 1 }, { unique: true });
 
+// Optimize donor-specific historical queries sorted by acceptance timestamp descending
+donationResponseSchema.index({ donorId: 1, acceptedAt: -1, _id: -1 });
+
 export const DonationResponse: Model<DonationResponseDocument> =
   mongoose.models.DonationResponse ||
   mongoose.model<DonationResponseDocument>('DonationResponse', donationResponseSchema);

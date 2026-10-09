@@ -71,17 +71,65 @@ function getUrgencyBadgeConfig(urgency: DonationRequestUrgency | string) {
   };
 }
 
+const EXTRA_PREVIEW_DETAILS: Record<string, DonationRequestDetailItem> = {
+  'preview-req-closed': {
+    id: 'preview-req-closed',
+    bloodGroup: 'A+',
+    unitsRequired: 1,
+    hospitalId: 'hosp-2',
+    hospitalName: 'Colombo National Hospital',
+    locationDescription: 'Regent Street, Colombo 08 — Emergency Ward Intake',
+    urgency: 'Urgent',
+    neededBy: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    status: 'closed',
+    publishedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
+    isAvailable: false,
+    donorResponse: {
+      status: 'accepted',
+      acceptedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  },
+  'preview-req-expired': {
+    id: 'preview-req-expired',
+    bloodGroup: 'AB-',
+    unitsRequired: 1,
+    hospitalId: 'hosp-4',
+    hospitalName: 'Teaching Hospital Karapitiya',
+    locationDescription: 'Galle — Blood Bank Counter 2',
+    urgency: 'Scheduled',
+    neededBy: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    status: 'published',
+    publishedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
+    isAvailable: false,
+    donorResponse: {
+      status: 'accepted',
+      acceptedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  },
+};
+
 export function DonationRequestDetailScreen() {
   const router = useRouter();
-  const { id, preview } = useLocalSearchParams<{ id?: string; preview?: string }>();
+  const { id, preview, origin: rawOrigin } = useLocalSearchParams<{
+    id?: string;
+    preview?: string;
+    origin?: string;
+  }>();
   const { token, user, isLoading: isAuthLoading } = useAuth();
 
   const isPreview = Boolean(
     __DEV__ && (preview === '1' || (typeof id === 'string' && id.startsWith('preview-'))),
   );
 
+  const origin = rawOrigin === 'accepted' ? 'accepted' : 'dashboard';
+
   const initialPreviewRequest: DonationRequestDetailItem | null = isPreview
     ? (() => {
+        if (id && EXTRA_PREVIEW_DETAILS[id]) {
+          return EXTRA_PREVIEW_DETAILS[id];
+        }
         const match = SAMPLE_PREVIEW_REQUESTS.find((r) => r.id === id) || SAMPLE_PREVIEW_REQUESTS[0];
         return match ? { ...match, isAvailable: true, donorResponse: null } : null;
       })()
@@ -200,10 +248,18 @@ export function DonationRequestDetailScreen() {
   };
 
   const handleBackToDashboard = () => {
-    if (isPreview) {
-      router.replace('/donor/dashboard?preview=1' as any);
+    if (origin === 'accepted') {
+      if (isPreview) {
+        router.replace('/donor/my-accepted?preview=1' as any);
+      } else {
+        router.replace('/donor/my-accepted' as any);
+      }
     } else {
-      router.replace('/donor/dashboard' as any);
+      if (isPreview) {
+        router.replace('/donor/dashboard?preview=1' as any);
+      } else {
+        router.replace('/donor/dashboard' as any);
+      }
     }
   };
 
@@ -228,10 +284,10 @@ export function DonationRequestDetailScreen() {
             onPress={handleBackToDashboard}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Back to donation requests"
+            accessibilityLabel="Back"
           >
             <Ionicons name="arrow-back" size={22} color={colors.secondary} />
-            <Text style={styles.backButtonText}>Requests</Text>
+            <Text style={styles.backButtonText}>{origin === 'accepted' ? 'Accepted' : 'Requests'}</Text>
           </TouchableOpacity>
           <ScreenSwitcher currentScreenId={27} />
         </View>
@@ -453,13 +509,30 @@ export function DonationRequestDetailScreen() {
                     <Text style={styles.recordedBadgeText}>Willingness Recorded</Text>
                   </View>
 
+                  {/* LINK TO MY ACCEPTED REQUESTS */}
+                  <TouchableOpacity
+                    style={styles.viewAcceptedListButton}
+                    onPress={() => {
+                      const path = `/donor/my-accepted${isPreview ? '?preview=1' : ''}`;
+                      router.push(path as any);
+                    }}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="View my accepted requests"
+                  >
+                    <Ionicons name="list" size={16} color={colors.primary} />
+                    <Text style={styles.viewAcceptedListButtonText}>View My Accepted Requests</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={styles.backToRequestsButton}
                     onPress={handleBackToDashboard}
                     activeOpacity={0.8}
                   >
                     <Ionicons name="arrow-back" size={16} color={colors.secondary} />
-                    <Text style={styles.backToRequestsButtonText}>Back to donation requests</Text>
+                    <Text style={styles.backToRequestsButtonText}>
+                      {origin === 'accepted' ? 'Back to accepted requests' : 'Back to donation requests'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : !request.isAvailable ? (
@@ -883,6 +956,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.secondary,
+  },
+  viewAcceptedListButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.primarySoft,
+    paddingVertical: 12,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    marginTop: spacing.sm,
+  },
+  viewAcceptedListButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
   },
   unavailableCard: {
     backgroundColor: colors.backgroundCard,

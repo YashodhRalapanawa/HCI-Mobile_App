@@ -113,6 +113,143 @@ donationRequestRouter.get(
 );
 
 /**
+ * GET /api/donation-requests/my-accepted
+ * Authenticated, donor-role authorized list of requests the current donor has offered to donate for.
+ * - Registered before /:id so static route is never captured by param.
+ * - Preserves historical acceptances: published, closed, and expired requests remain visible.
+ * - Missing or draft linked requests are returned as safe minimal unavailable items.
+ * - Strict donor isolation derived exclusively from verified JWT authentication.
+ * - Bounded pagination and deterministic ordering by acceptedAt descending with unique _id tie-breaker.
+ * - Strictly read-only: does not modify responseCount, timestamps, status, or fulfillment.
+ */
+donationRequestRouter.get(
+  '/my-accepted',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      if (req.user?.role !== 'donor') {
+        res.status(403).json({
+          message: 'Access restricted to registered blood donors.',
+        });
+        return;
+      }
+
+      const rawPage = req.query.page;
+      const rawLimit = req.query.limit;
+
+      let page = 1;
+      let limit = 10;
+
+      if (rawPage !== undefined) {
+        const parsedPage = Number(rawPage);
+        if (!Number.isInteger(parsedPage) || parsedPage < 1) {
+          res.status(400).json({ message: 'Page query parameter must be a positive integer.' });
+          return;
+        }
+        page = parsedPage;
+      }
+
+      if (rawLimit !== undefined) {
+        const parsedLimit = Number(rawLimit);
+        if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 50) {
+          res.status(400).json({
+            message: 'Limit query parameter must be an integer between 1 and 50.',
+          });
+          return;
+        }
+        limit = parsedLimit;
+      }
+
+      const filter = { donorId: req.user._id };
+      const skip = (page - 1) * limit;
+
+      const [total, responses] = await Promise.all([
+        DonationResponse.countDocuments(filter),
+        DonationResponse.find(filter)
+          .sort({ acceptedAt: -1, _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+      ]);
+
+      const totalPages = Math.ceil(total / limit) || 1;
+
+      // Efficient O(1) in-memory batch fetch for linked DonationRequest documents
+      const requestIds = responses.map((r) => r.donationRequestId);
+      const requestDocs = await DonationRequest.find({
+        _id: { $in: requestIds },
+      }).lean();
+
+      const requestMap = new Map(requestDocs.map((doc) => [doc._id.toString(), doc]));
+      const now = new Date();
+
+      const acceptedRequests = responses.map((resp) => {
+        const reqDoc = requestMap.get(resp.donationRequestId.toString());
+
+        // If missing or in draft status: provide safe, minimal unavailable placeholder
+        if (!reqDoc || reqDoc.status === 'draft') {
+          return {
+            responseId: resp._id.toString(),
+            donationRequestId: resp.donationRequestId.toString(),
+            acceptedAt: resp.acceptedAt.toISOString(),
+            bloodGroup: null,
+            unitsRequired: null,
+            hospitalName: 'Information unavailable',
+            locationDescription: null,
+            urgency: null,
+            neededBy: null,
+            availability: 'unavailable' as const,
+            canViewDetails: false,
+          };
+        }
+
+        // Request exists and is published or closed
+        let availability: 'open' | 'closed' | 'expired' | 'unavailable';
+        if (reqDoc.status === 'closed') {
+          availability = 'closed';
+        } else if (reqDoc.neededBy && new Date(reqDoc.neededBy) < now) {
+          availability = 'expired';
+        } else if (reqDoc.status === 'published') {
+          availability = 'open';
+        } else {
+          availability = 'unavailable';
+        }
+
+        return {
+          responseId: resp._id.toString(),
+          donationRequestId: resp.donationRequestId.toString(),
+          acceptedAt: resp.acceptedAt.toISOString(),
+          bloodGroup: reqDoc.bloodGroup,
+          unitsRequired: reqDoc.unitsRequired,
+          hospitalName: reqDoc.hospitalName,
+          locationDescription: reqDoc.locationDescription,
+          urgency: reqDoc.urgency,
+          neededBy: reqDoc.neededBy ? reqDoc.neededBy.toISOString() : null,
+          availability,
+          canViewDetails: true,
+        };
+      });
+
+      res.status(200).json({
+        acceptedRequests,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage: page < totalPages,
+        },
+      });
+    } catch (error) {
+      console.error('[donation-requests] Error fetching accepted requests:', error);
+      res.status(500).json({
+        message: 'An error occurred while loading your accepted donation requests.',
+      });
+    }
+  },
+);
+
+/**
  * GET /api/donation-requests/:id
  * Authenticated, donor-role authorized detail endpoint.
  * Returns safe details of a donation request plus the current authenticated donor's response.

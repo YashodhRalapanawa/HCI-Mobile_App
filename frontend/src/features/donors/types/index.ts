@@ -46,3 +46,24 @@ export interface DonationAcceptResponse {
   message: string;
   donorResponse: DonationResponseDto;
 }
+
+export type DonationRequestAvailability = 'open' | 'closed' | 'expired' | 'unavailable';
+
+export interface MyAcceptedRequestItem {
+  responseId: string;
+  donationRequestId: string;
+  acceptedAt: string;
+  bloodGroup: string | null;
+  unitsRequired: number | null;
+  hospitalName: string;
+  locationDescription: string | null;
+  urgency: DonationRequestUrgency | null;
+  neededBy: string | null;
+  availability: DonationRequestAvailability;
+  canViewDetails: boolean;
+}
+
+export interface MyAcceptedRequestsResponse {
+  acceptedRequests: MyAcceptedRequestItem[];
+  pagination: DonationRequestsPagination;
+}

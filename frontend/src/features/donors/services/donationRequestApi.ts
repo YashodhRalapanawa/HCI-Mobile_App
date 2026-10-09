@@ -3,6 +3,7 @@ import type {
   DonationAcceptResponse,
   DonationRequestDetailResponse,
   DonationRequestsResponse,
+  MyAcceptedRequestsResponse,
 } from '../types';
 
 export const donationRequestApi = {
@@ -59,4 +60,27 @@ export const donationRequestApi = {
       },
     });
   },
+
+  /**
+   * Fetches the paginated list of donation requests the authenticated donor has offered to donate for.
+   * Requires authenticated donor bearer token.
+   */
+  getMyAcceptedRequests: async (
+    token: string,
+    page = 1,
+    limit = 10,
+  ): Promise<MyAcceptedRequestsResponse> => {
+    const query = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    }).toString();
+
+    return apiRequest<MyAcceptedRequestsResponse>(`donation-requests/my-accepted?${query}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  },
 };
+

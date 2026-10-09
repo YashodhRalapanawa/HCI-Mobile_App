@@ -277,6 +277,31 @@ export function DonorDashboardScreen() {
             </Text>
           </View>
 
+          {/* PROMINENT QUICK ACTION: MY ACCEPTED REQUESTS */}
+          <TouchableOpacity
+            style={styles.myAcceptedActionButton}
+            onPress={() => {
+              const path = `/donor/my-accepted${isPreview ? '?preview=1' : ''}`;
+              router.push(path as any);
+            }}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="View my accepted requests"
+          >
+            <View style={styles.myAcceptedActionLeft}>
+              <View style={styles.myAcceptedIconCircle}>
+                <Ionicons name="checkbox" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.myAcceptedTextContainer}>
+                <Text style={styles.myAcceptedActionTitle}>MY ACCEPTED REQUESTS</Text>
+                <Text style={styles.myAcceptedActionSubtitle}>
+                  View requests you have offered to donate for
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+          </TouchableOpacity>
+
           {/* LIST TITLE BAR */}
           <View style={styles.listTitleBar}>
             <Text style={styles.listTitle}>Donation requests</Text>
@@ -543,6 +568,46 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 4,
     lineHeight: 20,
+  },
+  myAcceptedActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    ...shadows.sm,
+  },
+  myAcceptedActionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  myAcceptedIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+  myAcceptedTextContainer: {
+    flex: 1,
+  },
+  myAcceptedActionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 0.5,
+  },
+  myAcceptedActionSubtitle: {
+    fontSize: 12,
+    color: colors.secondaryMuted,
+    marginTop: 2,
   },
   listTitleBar: {
     flexDirection: 'row',
