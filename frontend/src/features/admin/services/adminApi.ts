@@ -11,6 +11,8 @@ import type {
   CreateDonationRequestPayload,
   UpdateDonationRequestPayload,
   AdminDonorResponsesResponse,
+  AdminReportResponse,
+  AdminReportData,
 } from '../types';
 
 export const adminApi = {
@@ -317,5 +319,67 @@ export const adminApi = {
         Authorization: `Bearer ${token}`,
       },
     });
+  },
+
+  /**
+   * Fetches authoritative system aggregate report for the given Colombo date range.
+   */
+  getReport: async (
+    token: string,
+    params: { from: string; to: string },
+  ): Promise<AdminReportResponse> => {
+    const query = new URLSearchParams();
+    query.append('from', params.from);
+    query.append('to', params.to);
+
+    return apiRequest<AdminReportResponse>(`admin/reports?${query.toString()}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  },
+
+  /**
+   * Generates and downloads a vector PDF report for the active report snapshot.
+   * Sends authenticated POST request without embedding tokens in URLs.
+   */
+  downloadReportPdf: async (
+    token: string,
+    report: AdminReportData,
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const url = `${API_BASE_URL}/admin/reports/pdf`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ report }),
+    });
+
+    if (!res.ok) {
+      let errorMsg = `Failed to generate PDF (${res.status})`;
+      try {
+        const json = await res.json();
+        if (json.message) errorMsg = json.message;
+      } catch {
+        // ignore
+      }
+      throw new Error(errorMsg);
+    }
+
+    const blob = await res.blob();
+    let filename = `Blood_Request_and_Donation_Summary_Report_${report.appliedRange.from}_to_${report.appliedRange.to}.pdf`;
+
+    const disposition = res.headers.get('Content-Disposition') || res.headers.get('content-disposition');
+    if (disposition) {
+      const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+      if (match && match[1]) {
+        filename = match[1].trim();
+      }
+    }
+
+    return { blob, filename };
   },
 };

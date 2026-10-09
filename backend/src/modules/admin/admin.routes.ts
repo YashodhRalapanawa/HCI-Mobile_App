@@ -6,12 +6,14 @@ import { DonationResponse } from '../donors/donationResponse.model.js';
 import { User } from '../users/user.model.js';
 import { adminPatientRequestRouter } from './adminPatientRequest.routes.js';
 import { adminDonationRequestRouter } from './adminDonationRequest.routes.js';
+import { adminReportRouter } from './adminReport.routes.js';
 
 export const adminRouter = Router();
 
 // Subroutes
 adminRouter.use('/patient-requests', adminPatientRequestRouter);
 adminRouter.use('/donation-requests', adminDonationRequestRouter);
+adminRouter.use('/reports', adminReportRouter);
 
 /**
  * GET /api/admin/summary
