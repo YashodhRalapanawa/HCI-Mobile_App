@@ -244,9 +244,11 @@ export function NewRequestScreen() {
           <View style={styles.headerRow}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => (router.canGoBack() ? router.back() : router.replace('/profile'))}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/dashboard' as any))}
               activeOpacity={0.7}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Back to dashboard"
             >
               <Ionicons name="chevron-back" size={22} color="#1E293B" />
             </TouchableOpacity>
