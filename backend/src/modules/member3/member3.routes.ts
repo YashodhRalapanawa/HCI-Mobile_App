@@ -91,14 +91,27 @@ member3Router.get('/saved-searches', async (req: AuthenticatedRequest, res: Resp
   res.json({ searches: await SavedSearch.find({ ownerId: idOf(req) }).sort({ updatedAt: -1 }).lean() });
 });
 member3Router.post('/saved-searches', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { bloodGroup, radiusKm, eligibleOnly = true, availableNow = true } = req.body;
-  if (!validGroups.includes(bloodGroup) || !Number.isFinite(Number(radiusKm)) || Number(radiusKm) < 5 || Number(radiusKm) > 20) {
+  const { bloodGroup, radiusKm, eligibleOnly = true, availableNow = true, notifyWhenAvailable = false } = req.body;
+  if (!validGroups.includes(bloodGroup) || !Number.isFinite(Number(radiusKm)) || Number(radiusKm) < 5 || Number(radiusKm) > 20
+    || typeof eligibleOnly !== 'boolean' || typeof availableNow !== 'boolean' || typeof notifyWhenAvailable !== 'boolean') {
     res.status(400).json({ message: 'Invalid saved search.' }); return;
   }
-  res.status(201).json({ search: await SavedSearch.create({ ownerId: idOf(req), bloodGroup, radiusKm: Number(radiusKm), eligibleOnly, availableNow }) });
+  res.status(201).json({ search: await SavedSearch.create({ ownerId: idOf(req), bloodGroup, radiusKm: Number(radiusKm), eligibleOnly, availableNow, notifyWhenAvailable }) });
 });
 member3Router.put('/saved-searches/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const search = await SavedSearch.findOneAndUpdate({ _id: req.params.id, ownerId: idOf(req) }, req.body, { new: true, runValidators: true });
+  const allowed = ['bloodGroup', 'radiusKm', 'eligibleOnly', 'availableNow', 'notifyWhenAvailable'];
+  const updates = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)));
+  if ('bloodGroup' in updates && !validGroups.includes(updates.bloodGroup as string)) {
+    res.status(400).json({ message: 'Invalid blood group.' }); return;
+  }
+  if ('radiusKm' in updates && (!Number.isFinite(Number(updates.radiusKm)) || Number(updates.radiusKm) < 5 || Number(updates.radiusKm) > 20)) {
+    res.status(400).json({ message: 'Invalid radius.' }); return;
+  }
+  if (['eligibleOnly', 'availableNow', 'notifyWhenAvailable'].some((key) => key in updates && typeof updates[key] !== 'boolean')) {
+    res.status(400).json({ message: 'Search options must be boolean.' }); return;
+  }
+  if ('radiusKm' in updates) updates.radiusKm = Number(updates.radiusKm);
+  const search = await SavedSearch.findOneAndUpdate({ _id: req.params.id, ownerId: idOf(req) }, updates, { new: true, runValidators: true });
   if (!search) { res.status(404).json({ message: 'Saved search not found.' }); return; }
   res.json({ search });
 });

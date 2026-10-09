@@ -1,6 +1,6 @@
 import mongoose, { Schema, type Document, type Model } from 'mongoose';
 
-export type AlertType = 'emergency' | 'donor_request' | 'accepted' | 'campaign';
+export type AlertType = 'emergency' | 'donor_request' | 'accepted' | 'campaign' | 'availability';
 
 export interface SavedSearchDocument extends Document {
   ownerId: mongoose.Types.ObjectId;
@@ -8,6 +8,7 @@ export interface SavedSearchDocument extends Document {
   radiusKm: number;
   eligibleOnly: boolean;
   availableNow: boolean;
+  notifyWhenAvailable: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +69,7 @@ const savedSearchSchema = new Schema<SavedSearchDocument>({
   radiusKm: { type: Number, min: 5, max: 20, required: true },
   eligibleOnly: { type: Boolean, default: true },
   availableNow: { type: Boolean, default: true },
+  notifyWhenAvailable: { type: Boolean, default: false },
 }, { timestamps: true });
 
 const requestSchema = new Schema<DonorRequestDocument>({
@@ -79,7 +81,7 @@ requestSchema.index({ requesterId: 1, donorId: 1, status: 1 });
 
 const notificationSchema = new Schema<NotificationDocument>({
   recipientId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  type: { type: String, enum: ['emergency', 'donor_request', 'accepted', 'campaign'], required: true },
+  type: { type: String, enum: ['emergency', 'donor_request', 'accepted', 'campaign', 'availability'], required: true },
   title: { type: String, required: true, trim: true },
   details: { type: String, required: true, trim: true },
   read: { type: Boolean, default: false },

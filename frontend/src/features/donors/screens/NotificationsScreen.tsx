@@ -31,6 +31,7 @@ const defaultPreferences: Preferences = {
   donor_request: true,
   accepted: true,
   campaign: true,
+  availability: true,
 };
 const filterLabels: Record<Filter, string> = {
   all: 'All',
@@ -39,12 +40,14 @@ const filterLabels: Record<Filter, string> = {
   donor_request: 'Requests',
   accepted: 'Updates',
   campaign: 'Campaigns',
+  availability: 'Donor availability',
 };
 
 function notificationIcon(type: AlertType): keyof typeof Ionicons.glyphMap {
   if (type === 'emergency') return 'alert-circle';
   if (type === 'accepted') return 'checkmark-circle';
   if (type === 'campaign') return 'calendar';
+  if (type === 'availability') return 'notifications';
   return 'person-add';
 }
 
