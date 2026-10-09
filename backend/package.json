@@ -13,7 +13,8 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "admin:create": "tsx scripts/provision-admin.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

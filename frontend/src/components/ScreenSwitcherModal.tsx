@@ -49,6 +49,7 @@ export const MEMBER_1_SCREENS: ScreenItem[] = [
   { id: 26, title: 'Donor Dashboard (Preview)', route: '/donor/dashboard?preview=1', category: 'profile', figmaName: 'Member 3.1 — Donor Dashboard' },
   { id: 27, title: 'Donation Request Details (Preview)', route: '/donor/requests/preview-req-1?preview=1', category: 'profile', figmaName: 'Member 3.2 — Donation Request Details' },
   { id: 28, title: 'My Accepted Requests (Preview)', route: '/donor/my-accepted?preview=1', category: 'profile', figmaName: 'Member 3.3 — My Accepted Requests' },
+  { id: 29, title: 'Admin Dashboard (Preview)', route: '/admin?preview=1', category: 'profile', figmaName: 'Member 4.1 — Admin Dashboard' },
 ];
 
 interface ScreenSwitcherProps {
@@ -97,6 +98,8 @@ export function ScreenSwitcher({ currentScreenId }: ScreenSwitcherProps) {
       ? 'Member 3.2'
       : currentScreenId === 28
       ? 'Member 3.3'
+      : currentScreenId === 29
+      ? 'Admin'
       : activeIndex !== -1
       ? `Screen ${activeIndex + 1}/${MEMBER_1_SCREENS.length}`
       : `Screen ${currentScreenId}`;

@@ -40,3 +40,29 @@ export async function authenticate(
     res.status(401).json({ message: 'Invalid or expired session token. Please log in again.' });
   }
 }
+
+/**
+ * Authorization guard: Restricts access to users with role 'admin'.
+ * Must be mounted after `authenticate`.
+ * - Missing/unauthenticated session returns 401.
+ * - Authenticated non-admin caller returns 403.
+ * - Relies exclusively on trusted database record attached to req.user.
+ */
+export function requireAdmin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (!req.user) {
+    res.status(401).json({ message: 'Authentication required. Please provide a valid Bearer token.' });
+    return;
+  }
+
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ message: 'Access denied. Administrative privileges required.' });
+    return;
+  }
+
+  next();
+}
+

@@ -161,7 +161,7 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
 // 2. LOGIN
 authRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password, role } = req.body;
+    const { email, password } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ message: 'Email and password are required.' });
@@ -184,11 +184,8 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    if (role && (role === 'donor' || role === 'recipient') && user.role !== role) {
-      user.role = role;
-      await user.save();
-    }
-
+    // Authenticated user role is authoritative in the database and must never
+    // be mutated or demoted by client login parameters.
     const token = generateToken(user._id.toString());
     res.status(200).json({
       message: 'Logged in successfully.',

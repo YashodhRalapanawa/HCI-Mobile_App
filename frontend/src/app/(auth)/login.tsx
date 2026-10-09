@@ -64,6 +64,8 @@ export default function LoginScreen() {
       const loggedUser = await login(trimmedInput, password, role);
       if (params.returnTo) {
         router.replace(params.returnTo as any);
+      } else if (loggedUser.role === 'admin') {
+        router.replace('/admin' as any);
       } else if (loggedUser.role === 'donor') {
         router.replace('/donor/dashboard' as any);
       } else {

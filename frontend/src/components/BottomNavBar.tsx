@@ -14,7 +14,9 @@ export function BottomNavBar({ activeTab = 'home' }: BottomNavBarProps) {
   const { user } = useAuth();
 
   const handleHomePress = () => {
-    if (user?.role === 'donor') {
+    if (user?.role === 'admin') {
+      router.replace('/admin' as any);
+    } else if (user?.role === 'donor') {
       router.replace('/donor/dashboard' as any);
     } else {
       router.replace('/dashboard' as any);

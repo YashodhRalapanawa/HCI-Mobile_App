@@ -790,8 +790,8 @@ test('Donation Requests API Integration (Member 3.1 & 3.2)', async (t) => {
       assert.equal(donor1Body.pagination.hasNextPage, true);
       assert.equal(donor1Body.acceptedRequests.length, 2);
       // Newest acceptedAt first
-      assert.equal(donor1Body.acceptedRequests[0].donationRequestId, reqC._id.toString());
-      assert.equal(donor1Body.acceptedRequests[1].donationRequestId, reqB._id.toString());
+      assert.equal(donor1Body.acceptedRequests[0]?.donationRequestId, reqC._id.toString());
+      assert.equal(donor1Body.acceptedRequests[1]?.donationRequestId, reqB._id.toString());
 
       // Query page 2
       const donor1Page2Res = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted?page=2&limit=2`, {
@@ -805,7 +805,7 @@ test('Donation Requests API Integration (Member 3.1 & 3.2)', async (t) => {
       assert.equal(donor1Page2Body.pagination.page, 2);
       assert.equal(donor1Page2Body.pagination.hasNextPage, false);
       assert.equal(donor1Page2Body.acceptedRequests.length, 1);
-      assert.equal(donor1Page2Body.acceptedRequests[0].donationRequestId, reqA._id.toString());
+      assert.equal(donor1Page2Body.acceptedRequests[0]?.donationRequestId, reqA._id.toString());
 
       // 3. Strict Donor Isolation: Donor 2 must ONLY see Donor 2's response, never Donor 1's
       const donor2Res = await fetch(`http://127.0.0.1:${port}/api/donation-requests/my-accepted`, {
@@ -823,8 +823,8 @@ test('Donation Requests API Integration (Member 3.1 & 3.2)', async (t) => {
 
       assert.equal(donor2Body.pagination.total, 1);
       assert.equal(donor2Body.acceptedRequests.length, 1);
-      assert.equal(donor2Body.acceptedRequests[0].responseId, resp2A._id.toString());
-      assert.equal(donor2Body.acceptedRequests[0].donationRequestId, reqA._id.toString());
+      assert.equal(donor2Body.acceptedRequests[0]?.responseId, resp2A._id.toString());
+      assert.equal(donor2Body.acceptedRequests[0]?.donationRequestId, reqA._id.toString());
     });
 
     await t.test('GET /api/donation-requests/my-accepted preserves historical closed/expired responses and handles missing/draft safely without mutating data', async () => {

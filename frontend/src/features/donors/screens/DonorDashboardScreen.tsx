@@ -202,14 +202,17 @@ export function DonorDashboardScreen() {
     [isPreview, token, user],
   );
 
-  // Refetch when screen gains focus or auth loading finishes
+  // Redirect administrator to admin portal if accessing donor dashboard
   useFocusEffect(
     useCallback(() => {
-      if (isPreview) return;
-      if (!isAuthLoading) {
+      if (!isPreview && !isAuthLoading && token && token !== 'demo-jwt-token' && user?.role === 'admin') {
+        router.replace('/admin' as any);
+        return;
+      }
+      if (!isPreview && !isAuthLoading && user?.role !== 'admin') {
         void fetchRequests(1, false);
       }
-    }, [isPreview, isAuthLoading, fetchRequests]),
+    }, [isPreview, isAuthLoading, token, user?.role, router, fetchRequests]),
   );
 
   const handleManualRefresh = () => {

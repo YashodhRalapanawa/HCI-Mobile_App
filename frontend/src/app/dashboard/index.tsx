@@ -73,8 +73,12 @@ export default function DashboardScreen() {
   const { user, token, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && token && token !== 'demo-jwt-token' && user?.role === 'donor') {
-      router.replace('/donor/dashboard' as any);
+    if (!isLoading && token && token !== 'demo-jwt-token') {
+      if (user?.role === 'admin') {
+        router.replace('/admin' as any);
+      } else if (user?.role === 'donor') {
+        router.replace('/donor/dashboard' as any);
+      }
     }
   }, [isLoading, token, user?.role, router]);
 
