@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -318,6 +319,41 @@ export function MyAcceptedRequestsScreen() {
     void fetchAcceptedRequests(pagination.page + 1);
   };
 
+  const handleCancelResponse = (item: MyAcceptedRequestItem) => {
+    if (isPreview || !token) return;
+
+    Alert.alert(
+      'Cancel donation response?',
+      `You will no longer be listed as a donor for ${item.hospitalName}.`,
+      [
+        { text: 'Keep response', style: 'cancel' },
+        {
+          text: 'Cancel response',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await donationRequestApi.cancelDonationResponse(token, item.donationRequestId);
+              setAcceptedRequests((current) =>
+                current.filter((request) => request.responseId !== item.responseId),
+              );
+              setPagination((current) =>
+                current
+                  ? { ...current, total: Math.max(0, current.total - 1) }
+                  : current,
+              );
+              Alert.alert('Response cancelled', 'Your donation response was cancelled successfully.');
+            } catch (error: any) {
+              Alert.alert(
+                'Unable to cancel response',
+                error?.message || 'Please try again.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleBackToDashboard = () => {
     if (isPreview) {
       router.replace('/donor/dashboard?preview=1' as any);
@@ -574,24 +610,38 @@ export function MyAcceptedRequestsScreen() {
                       </Text>
                     </View>
 
-                    {/* ACTION ROW: VIEW DETAILS (Only when accessible) */}
-                    {item.canViewDetails && (
+                    {/* ACTION ROW: VIEW DETAILS AND CANCEL RESPONSE */}
+                    {(item.canViewDetails || item.availability === 'open') && (
                       <View style={styles.cardActionRow}>
-                        <TouchableOpacity
-                          style={styles.viewDetailsButton}
-                          onPress={() => {
-                            const path = `/donor/requests/${item.donationRequestId}?origin=accepted${
-                              isPreview ? '&preview=1' : ''
-                            }`;
-                            router.push(path as any);
-                          }}
-                          activeOpacity={0.7}
-                          accessibilityRole="button"
-                          accessibilityLabel={`View details for donation request at ${item.hospitalName}`}
-                        >
-                          <Text style={styles.viewDetailsText}>VIEW DETAILS</Text>
-                          <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-                        </TouchableOpacity>
+                        {item.canViewDetails && (
+                          <TouchableOpacity
+                            style={styles.viewDetailsButton}
+                            onPress={() => {
+                              const path = `/donor/requests/${item.donationRequestId}?origin=accepted${
+                                isPreview ? '&preview=1' : ''
+                              }`;
+                              router.push(path as any);
+                            }}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel={`View details for donation request at ${item.hospitalName}`}
+                          >
+                            <Text style={styles.viewDetailsText}>VIEW DETAILS</Text>
+                            <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+                          </TouchableOpacity>
+                        )}
+                        {item.availability === 'open' && (
+                          <TouchableOpacity
+                            style={styles.cancelResponseButton}
+                            onPress={() => handleCancelResponse(item)}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Cancel donation response for ${item.hospitalName}`}
+                          >
+                            <Ionicons name="close-circle-outline" size={15} color={colors.danger} />
+                            <Text style={styles.cancelResponseText}>CANCEL RESPONSE</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     )}
                   </View>
@@ -921,6 +971,19 @@ const styles = StyleSheet.create({
     color: colors.primary,
     letterSpacing: 0.5,
     marginRight: 4,
+  },
+  cancelResponseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  cancelResponseText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.danger,
+    letterSpacing: 0.5,
+    marginLeft: 4,
   },
   loadMoreContainer: {
     paddingVertical: spacing.md,

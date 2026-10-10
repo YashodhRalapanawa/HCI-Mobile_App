@@ -1,5 +1,5 @@
 export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'O+' | 'O-' | 'AB+' | 'AB-';
-export type AlertType = 'emergency' | 'donor_request' | 'accepted' | 'campaign' | 'availability';
+export type AlertType = 'emergency' | 'donor_request' | 'request_submitted' | 'accepted' | 'declined' | 'campaign' | 'availability' | 'message' | 'call';
 
 export interface SavedSearch {
   _id: string;
