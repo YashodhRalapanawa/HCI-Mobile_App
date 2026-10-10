@@ -1,8 +1,9 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '@/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface AppHeaderProps {
   title: string;
@@ -20,6 +21,9 @@ export function AppHeader({
   rightElement,
 }: AppHeaderProps) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const compact = width < 430;
 
   const handleBack = () => {
     if (onBack) {
@@ -32,7 +36,7 @@ export function AppHeader({
   };
 
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, Platform.OS === 'android' && { paddingTop: insets.top + spacing.xs }]}>
       <View style={styles.leftContainer}>
         {showBack && (
           <TouchableOpacity
@@ -45,7 +49,7 @@ export function AppHeader({
           </TouchableOpacity>
         )}
         <View style={styles.titleContainer}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={[styles.title, compact && styles.compactTitle]} numberOfLines={1}>
             {title}
           </Text>
           {subtitle ? (
@@ -95,6 +99,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     letterSpacing: -0.3,
   },
+  compactTitle: {
+    fontSize: 16,
+  },
   subtitle: {
     fontSize: 12,
     color: colors.textMuted,
@@ -103,5 +110,6 @@ const styles = StyleSheet.create({
   },
   rightContainer: {
     marginLeft: spacing.sm,
+    flexShrink: 0,
   },
 });

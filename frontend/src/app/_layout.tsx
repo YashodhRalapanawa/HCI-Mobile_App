@@ -30,6 +30,12 @@ export default function RootLayout() {
           <Stack.Screen name="profile/public-preview" />
           <Stack.Screen name="profile/settings" />
           <Stack.Screen name="requests/new" />
+          <Stack.Screen name="find-donors" />
+          <Stack.Screen name="matching-donors" />
+          <Stack.Screen name="notifications" />
+          <Stack.Screen name="chat" />
+          <Stack.Screen name="call-modal" options={{ presentation: 'transparentModal' }} />
+          <Stack.Screen name="(donor-tabs)" />
         </Stack>
         <StatusBar style="dark" />
       </AuthProvider>
