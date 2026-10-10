@@ -3,9 +3,6 @@ import cors from 'cors';
 import { isDatabaseConnected } from './config/database.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { userRouter } from './modules/users/user.routes.js';
-import { requestRouter } from './modules/requests/request.routes.js';
-import { donationRequestRouter } from './modules/donors/donationRequest.routes.js';
-import { adminRouter } from './modules/admin/admin.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -35,15 +32,6 @@ export function createApp(): Express {
   // Member 1 Feature Routes
   app.use('/api/auth', authRouter);
   app.use('/api/users', userRouter);
-
-  // Member 2 Feature Routes
-  app.use('/api/requests', requestRouter);
-
-  // Member 3 Feature Routes (Donor)
-  app.use('/api/donation-requests', donationRequestRouter);
-
-  // Member 4 Feature Routes (Admin)
-  app.use('/api/admin', adminRouter);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });
