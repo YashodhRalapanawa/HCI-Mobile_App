@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { authenticate, type AuthenticatedRequest } from '../../middleware/auth.js';
 import { User, type UserDocument } from '../users/user.model.js';
 import { CallSession, Chat, DonorRequest, Message, Notification, SavedSearch } from './member3.models.js';
+import { sendPushNotification } from '../notifications/push.service.js';
 
 export const member3Router = Router();
 member3Router.use(authenticate);
@@ -121,7 +122,7 @@ member3Router.delete('/saved-searches/:id', async (req: AuthenticatedRequest, re
 
 member3Router.get('/requests', async (req: AuthenticatedRequest, res: Response) => {
   const requests = await DonorRequest.find({ requesterId: idOf(req), status: 'pending' }).lean();
-  res.json({ requests: requests.map((request) => ({ id: request._id.toString(), donorId: request.donorId.toString(), status: request.status })) });
+  res.json({ requests: requests.map((request) => ({ id: request._id.toString(), donorId: donorKey(request.donorId.toString()), status: request.status })) });
 });
 member3Router.post('/requests', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const donorKeyValue = String(req.body.donorId ?? '');
@@ -131,25 +132,138 @@ member3Router.post('/requests', async (req: AuthenticatedRequest, res: Response)
   const exists = await DonorRequest.findOne({ requesterId: idOf(req), donorId, status: 'pending' });
   if (exists) { res.status(409).json({ message: 'A pending request already exists.' }); return; }
   const request = await DonorRequest.create({ requesterId: idOf(req), donorId });
-  await Notification.create({ recipientId: donor._id, type: 'donor_request', title: 'New donor request', details: 'A recipient requested your help.', relatedRequestId: request._id });
-  // TODO: enqueue FCM push notification; target delivery is under 10 seconds.
-  res.status(201).json({ request: { id: request._id.toString(), donorId, status: request.status } });
+  const notification = await Notification.create({
+    recipientId: donor._id,
+    type: 'donor_request',
+    title: 'New donor request',
+    details: 'A recipient requested your help.',
+    relatedRequestId: request._id,
+  });
+  await sendPushNotification(donor, {
+    title: notification.title,
+    body: notification.details,
+    data: { notificationId: notification._id.toString(), type: notification.type },
+    sound: 'default',
+  });
+  res.status(201).json({ request: { id: request._id.toString(), donorId: donorKey(donorId), status: request.status } });
 });
 member3Router.delete('/requests/:donorId', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  await DonorRequest.updateOne({ requesterId: idOf(req), donorId: req.params.donorId, status: 'pending' }, { status: 'cancelled' });
-  await Notification.deleteMany({ recipientId: req.params.donorId, type: 'donor_request', relatedRequestId: { $exists: true } });
+  const donor = (await User.find({ role: 'donor' })).find((candidate) => donorKey(candidate._id.toString()) === req.params.donorId);
+  if (!donor) {
+    res.status(404).json({ message: 'Donor not found.' });
+    return;
+  }
+  const request = await DonorRequest.findOneAndUpdate(
+    { requesterId: idOf(req), donorId: donor._id, status: 'pending' },
+    { status: 'cancelled' },
+    { new: true },
+  );
+  if (request) {
+    const donor = await User.findById(request.donorId);
+    if (donor) {
+      const notification = await Notification.create({
+        recipientId: donor._id,
+        type: 'declined',
+        title: 'Request cancelled',
+        details: 'The recipient cancelled the donor request.',
+        relatedRequestId: request._id,
+      });
+      await sendPushNotification(donor, {
+        title: notification.title,
+        body: notification.details,
+        data: { notificationId: notification._id.toString(), type: notification.type },
+        sound: 'default',
+      });
+    }
+  }
   res.status(204).send();
 });
 
 member3Router.get('/notifications', async (req: AuthenticatedRequest, res: Response) => res.json({ notifications: await Notification.find({ recipientId: idOf(req) }).sort({ createdAt: -1 }).lean() }));
 member3Router.patch('/notifications/:id/read', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const notification = await Notification.findOneAndUpdate({ _id: req.params.id, recipientId: idOf(req) }, { read: true }, { new: true }); if (!notification) { res.status(404).json({ message: 'Notification not found.' }); return; } res.json({ notification }); });
 member3Router.patch('/notifications/read-all', async (req: AuthenticatedRequest, res: Response) => { await Notification.updateMany({ recipientId: idOf(req), read: false }, { read: true }); res.json({ message: 'All notifications marked as read.' }); });
-member3Router.post('/notifications/:id/respond', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const { response } = req.body; if (response !== 'accepted' && response !== 'declined') { res.status(400).json({ message: 'Response must be accepted or declined.' }); return; } const notification = await Notification.findOneAndUpdate({ _id: req.params.id, recipientId: idOf(req) }, { read: true }, { new: true }); if (!notification) { res.status(404).json({ message: 'Notification not found.' }); return; } if (notification.relatedRequestId) await DonorRequest.findByIdAndUpdate(notification.relatedRequestId, { status: response }); res.json({ notification }); });
+member3Router.post('/notifications/:id/respond', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { response } = req.body;
+  if (response !== 'accepted' && response !== 'declined') {
+    res.status(400).json({ message: 'Response must be accepted or declined.' });
+    return;
+  }
+  const notification = await Notification.findOneAndUpdate(
+    { _id: req.params.id, recipientId: idOf(req) },
+    { read: true },
+    { new: true },
+  );
+  if (!notification) {
+    res.status(404).json({ message: 'Notification not found.' });
+    return;
+  }
+  if (notification.relatedRequestId) {
+    const request = await DonorRequest.findByIdAndUpdate(
+      notification.relatedRequestId,
+      { status: response },
+      { new: true },
+    );
+    if (request) {
+      const requester = await User.findById(request.requesterId);
+      if (requester) {
+        const responseType = response === 'accepted' ? 'accepted' : 'declined';
+        const responseNotification = await Notification.create({
+          recipientId: requester._id,
+          type: responseType,
+          title: response === 'accepted' ? 'Request accepted' : 'Request declined',
+          details: response === 'accepted'
+            ? 'A donor accepted your blood donation request.'
+            : 'The donor is not available for this request.',
+          relatedRequestId: request._id,
+        });
+        await sendPushNotification(requester, {
+          title: responseNotification.title,
+          body: responseNotification.details,
+          data: { notificationId: responseNotification._id.toString(), type: responseNotification.type },
+          sound: 'default',
+        });
+      }
+    }
+  }
+  res.json({ notification });
+});
 member3Router.delete('/notifications/:id', async (req: AuthenticatedRequest, res: Response) => { await Notification.deleteOne({ _id: req.params.id, recipientId: idOf(req) }); res.status(204).send(); });
 
 member3Router.post('/chats', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const donorKeyValue = String(req.body.donorId ?? ''); const donor = (await User.find({ role: 'donor' })).find((candidate) => donorKey(candidate._id.toString()) === donorKeyValue); if (!donor) { res.status(400).json({ message: 'Valid donor is required.' }); return; } const donorId = donor._id; let chat = await Chat.findOne({ memberIds: { $all: [idOf(req), donorId], $size: 2 } }); if (!chat) chat = await Chat.create({ memberIds: [idOf(req), donorId] }); res.json({ chat: { id: chat._id.toString(), donorId: donorKeyValue } }); });
 member3Router.get('/chats/:id/messages', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const chat = await Chat.findOne({ _id: req.params.id, memberIds: idOf(req) }); if (!chat) { res.status(403).json({ message: 'Chat access denied.' }); return; } res.json({ messages: await Message.find({ chatId: chat._id }).sort({ createdAt: 1 }).lean() }); });
-member3Router.post('/chats/:id/messages', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const text = String(req.body.text ?? '').trim(); const chat = await Chat.findOne({ _id: req.params.id, memberIds: idOf(req) }); if (!chat || !text || text.length > 1000) { res.status(400).json({ message: 'Chat and message text are required.' }); return; } res.status(201).json({ message: await Message.create({ chatId: chat._id, senderId: idOf(req), text, deliveredAt: new Date() }) }); });
+member3Router.post('/chats/:id/messages', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const text = String(req.body.text ?? '').trim();
+  const chat = await Chat.findOne({ _id: req.params.id, memberIds: idOf(req) });
+  if (!chat || !text || text.length > 1000) {
+    res.status(400).json({ message: 'Chat and message text are required.' });
+    return;
+  }
+  const message = await Message.create({
+    chatId: chat._id,
+    senderId: idOf(req),
+    text,
+    deliveredAt: new Date(),
+  });
+  const recipientId = chat.memberIds.find((memberId) => memberId.toString() !== idOf(req).toString());
+  if (recipientId) {
+    const recipient = await User.findById(recipientId);
+    if (recipient) {
+      const notification = await Notification.create({
+        recipientId: recipient._id,
+        type: 'message',
+        title: 'New message',
+        details: `${req.user!.name} sent you a message.`,
+      });
+      await sendPushNotification(recipient, {
+        title: notification.title,
+        body: notification.details,
+        data: { notificationId: notification._id.toString(), type: notification.type, chatId: chat._id.toString() },
+        sound: 'default',
+      });
+    }
+  }
+  res.status(201).json({ message });
+});
 member3Router.patch('/chats/:id/messages/:mid/read', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const chat = await Chat.findOne({ _id: req.params.id, memberIds: idOf(req) }); if (!chat) { res.status(403).json({ message: 'Chat access denied.' }); return; } const message = await Message.findOneAndUpdate({ _id: req.params.mid, chatId: chat._id, senderId: { $ne: idOf(req) } }, { readAt: new Date(), deliveredAt: new Date() }, { new: true }); if (!message) { res.status(404).json({ message: 'Message not found.' }); return; } res.json({ message }); });
 member3Router.patch('/chats/:id/messages/:mid', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const text = String(req.body.text ?? '').trim(); const message = await Message.findOneAndUpdate({ _id: req.params.mid, chatId: req.params.id, senderId: idOf(req) }, { text }, { new: true, runValidators: true }); if (!message) { res.status(404).json({ message: 'Message not found.' }); return; } res.json({ message }); });
 member3Router.delete('/chats/:id/messages/:mid', async (req: AuthenticatedRequest, res: Response) => { await Message.deleteOne({ _id: req.params.mid, chatId: req.params.id, senderId: idOf(req) }); res.status(204).send(); });
@@ -157,7 +271,7 @@ member3Router.delete('/chats/:id/messages/:mid', async (req: AuthenticatedReques
 member3Router.get('/notification-preferences', async (req: AuthenticatedRequest, res: Response) => res.json({ preferences: req.user!.preferences }));
 member3Router.patch('/notification-preferences', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const allowed = ['pushNotifications', 'smsAlerts', 'emergencyNotifications', 'donorRequestNotifications', 'campaignNotifications'] as const; const update = Object.fromEntries(allowed.filter((key) => typeof req.body[key] === 'boolean').map((key) => [`preferences.${key}`, req.body[key]])); if (!Object.keys(update).length) { res.status(400).json({ message: 'At least one notification preference is required.' }); return; } const user = await User.findByIdAndUpdate(idOf(req), { $set: update }, { new: true }).select('preferences').lean(); res.json({ preferences: user?.preferences }); });
 
-member3Router.post('/calls/start', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const donorKeyValue = String(req.body.donorId ?? ''); const donor = (await User.find({ role: 'donor' })).find((candidate) => donorKey(candidate._id.toString()) === donorKeyValue); if (!donor) { res.status(400).json({ message: 'Valid donor is required.' }); return; } const expiresAt = new Date(Date.now() + 15 * 60 * 1000); const call = await CallSession.create({ callerId: idOf(req), donorId: donor._id, proxyNumber: '+94110000000', expiresAt, status: 'active' }); res.status(201).json({ callId: call._id.toString(), proxyNumber: call.proxyNumber, expiresAt, status: call.status }); });
+member3Router.post('/calls/start', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const donorKeyValue = String(req.body.donorId ?? ''); const donor = (await User.find({ role: 'donor' })).find((candidate) => donorKey(candidate._id.toString()) === donorKeyValue); if (!donor) { res.status(400).json({ message: 'Valid donor is required.' }); return; } const expiresAt = new Date(Date.now() + 15 * 60 * 1000); const call = await CallSession.create({ callerId: idOf(req), donorId: donor._id, proxyNumber: '+94110000000', expiresAt, status: 'active' }); const notification = await Notification.create({ recipientId: donor._id, type: 'call', title: 'Incoming donor call', details: `${req.user!.name} is trying to contact you about blood donation.` }); await sendPushNotification(donor, { title: notification.title, body: notification.details, data: { notificationId: notification._id.toString(), type: notification.type, callId: call._id.toString() }, sound: 'default' }); res.status(201).json({ callId: call._id.toString(), proxyNumber: call.proxyNumber, expiresAt, status: call.status }); });
 member3Router.get('/calls/history', async (req: AuthenticatedRequest, res: Response) => { const calls = await CallSession.find({ callerId: idOf(req) }).sort({ createdAt: -1 }).limit(50).lean(); res.json({ calls }); });
 member3Router.post('/calls/:id/end', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const call = await CallSession.findOneAndUpdate({ _id: req.params.id, callerId: idOf(req), status: 'active' }, { status: 'ended', endedAt: new Date() }, { new: true }); if (!call) { res.status(404).json({ message: 'Active call not found.' }); return; } res.json({ call }); });
 member3Router.post('/calls/:id/report', async (req: AuthenticatedRequest, res: Response): Promise<void> => { const reason = String(req.body.reason ?? '').trim(); const details = String(req.body.details ?? '').trim(); if (!reason || reason.length > 120 || details.length > 1000) { res.status(400).json({ message: 'A valid reason is required.' }); return; } const call = await CallSession.findOneAndUpdate({ _id: req.params.id, callerId: idOf(req) }, { report: { reason, details, createdAt: new Date() }, status: 'failed', endedAt: new Date() }, { new: true }); if (!call) { res.status(404).json({ message: 'Call session not found.' }); return; } res.status(201).json({ call }); });

@@ -61,6 +61,18 @@ export const donationRequestApi = {
     });
   },
 
+  cancelDonationResponse: async (
+    token: string,
+    id: string,
+  ): Promise<{ message: string }> => {
+    return apiRequest<{ message: string }>(`donation-requests/${id}/accept`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  },
+
   /**
    * Fetches the paginated list of donation requests the authenticated donor has offered to donate for.
    * Requires authenticated donor bearer token.
@@ -83,4 +95,3 @@ export const donationRequestApi = {
     });
   },
 };
-

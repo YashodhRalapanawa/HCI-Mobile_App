@@ -3,6 +3,11 @@ import cors from 'cors';
 import { isDatabaseConnected } from './config/database.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { userRouter } from './modules/users/user.routes.js';
+import { member3Router } from './modules/member3/member3.routes.js';
+import { notificationRouter } from './modules/notifications/notification.routes.js';
+import { requestRouter } from './modules/requests/request.routes.js';
+import { donationRequestRouter } from './modules/donors/donationRequest.routes.js';
+import { adminRouter } from './modules/admin/admin.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -32,6 +37,11 @@ export function createApp(): Express {
   // Member 1 Feature Routes
   app.use('/api/auth', authRouter);
   app.use('/api/users', userRouter);
+  app.use('/api/notifications', notificationRouter);
+  app.use('/api/requests', requestRouter);
+  app.use('/api/donation-requests', donationRequestRouter);
+  app.use('/api/admin', adminRouter);
+  app.use('/api', member3Router);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });

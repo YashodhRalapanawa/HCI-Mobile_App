@@ -13,9 +13,10 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Swipeable } from 'react-native-gesture-handler';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppHeader } from '@/components/AppHeader';
-import { colors, spacing, borderRadius } from '@/theme';
+import { colors, spacing, borderRadius, shadows } from '@/theme';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { donorService } from '../services/donorService';
 import { exportNotificationsPdf } from '../utils/pdf';
@@ -29,24 +30,36 @@ const preferenceKey = 'lifeline.notification-preferences';
 const defaultPreferences: Preferences = {
   emergency: true,
   donor_request: true,
+  request_submitted: true,
+  call: true,
   accepted: true,
+  declined: true,
   campaign: true,
   availability: true,
+  message: true,
 };
 const filterLabels: Record<Filter, string> = {
   all: 'All',
   unread: 'Unread',
   emergency: 'Emergency',
   donor_request: 'Requests',
+  request_submitted: 'Submitted requests',
+  call: 'Calls',
   accepted: 'Updates',
+  declined: 'Declined',
   campaign: 'Campaigns',
   availability: 'Donor availability',
+  message: 'Messages',
 };
 
 function notificationIcon(type: AlertType): keyof typeof Ionicons.glyphMap {
   if (type === 'emergency') return 'alert-circle';
+  if (type === 'request_submitted') return 'checkmark-done-circle';
+  if (type === 'call') return 'call';
   if (type === 'accepted') return 'checkmark-circle';
+  if (type === 'declined') return 'close-circle';
   if (type === 'campaign') return 'calendar';
+  if (type === 'message') return 'chatbubble';
   if (type === 'availability') return 'notifications';
   return 'person-add';
 }
@@ -76,7 +89,17 @@ export default function NotificationsScreen() {
       await load();
     };
     void loadNotifications();
+    const refreshTimer = setInterval(() => {
+      void load();
+    }, 10000);
+    return () => clearInterval(refreshTimer);
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   const refresh = async () => {
     setRefreshing(true);
@@ -98,6 +121,7 @@ export default function NotificationsScreen() {
     if (filter === 'unread') return !item.read;
     return filter === 'all' || item.type === filter;
   }), [filter, items, preferences]);
+  const unreadCount = items.filter((item) => !item.read).length;
 
   const remove = (id: string) => {
     void donorService.deleteNotification(token, id)
@@ -125,7 +149,7 @@ export default function NotificationsScreen() {
     if (side === 'right') {
       return <View style={styles.swipeDelete}><Ionicons name="trash-outline" size={22} color={colors.textInverted} /></View>;
     }
-    if (item.type === 'emergency' || item.type === 'donor_request') {
+    if (item.type === 'donor_request') {
       return (
         <View style={styles.swipeActions}>
           <TouchableOpacity style={styles.swipeAccept} onPress={() => respond(item, 'accepted')}><Text style={styles.swipeText}>Accept</Text></TouchableOpacity>
@@ -151,11 +175,22 @@ export default function NotificationsScreen() {
           </View>
         )}
       />
-      <View style={styles.toolbar}>
-        <Text style={styles.count}>{items.filter((item) => !item.read).length} unread</Text>
-        <TouchableOpacity onPress={() => { void donorService.readAll(token).then(() => setItems((old) => old.map((item) => ({ ...item, read: true })))); }}>
-          <Text style={styles.link}>Mark all read</Text>
-        </TouchableOpacity>
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryIcon}>
+          <Ionicons name={unreadCount ? 'notifications' : 'checkmark-done'} size={25} color={colors.primary} />
+        </View>
+        <View style={styles.summaryCopy}>
+          <Text style={styles.summaryTitle}>{unreadCount ? 'Stay up to date' : 'You are all caught up'}</Text>
+          <Text style={styles.summaryText}>{unreadCount ? `${unreadCount} notification${unreadCount === 1 ? '' : 's'} waiting for you` : 'No unread notifications right now'}</Text>
+        </View>
+        {unreadCount > 0 && (
+          <TouchableOpacity
+            style={styles.readAllButton}
+            onPress={() => { void donorService.readAll(token).then(() => setItems((old) => old.map((item) => ({ ...item, read: true })))); }}
+          >
+            <Text style={styles.readAllText}>Read all</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
         {(Object.keys(filterLabels) as Filter[]).map((key) => (
@@ -170,7 +205,9 @@ export default function NotificationsScreen() {
       >
         {visibleItems.length === 0 ? (
           <View style={styles.empty}>
-            <Ionicons name="checkmark-circle-outline" size={54} color={colors.success} />
+            <View style={styles.emptyIcon}>
+              <Ionicons name="checkmark-circle-outline" size={54} color={colors.success} />
+            </View>
             <Text style={styles.heading}>{items.length ? 'No matching notifications' : 'You\'re all caught up'}</Text>
             <Text style={styles.emptyText}>Pull down to refresh notifications.</Text>
           </View>
@@ -178,17 +215,22 @@ export default function NotificationsScreen() {
           <Swipeable key={item._id} renderLeftActions={() => renderActions(item, 'left')} renderRightActions={() => renderActions(item, 'right')} onSwipeableOpen={(direction) => direction === 'right' && remove(item._id)}>
             <View style={[styles.card, !item.read && styles.unread]}>
               <TouchableOpacity style={styles.row} onPress={() => { setSelected(item); patch(item._id, () => donorService.readNotification(token, item._id)); }}>
-                <Ionicons name={notificationIcon(item.type)} size={28} color={item.type === 'emergency' ? colors.danger : colors.primary} />
+                <View style={[styles.iconBubble, item.type === 'emergency' && styles.emergencyBubble]}>
+                  <Ionicons name={notificationIcon(item.type)} size={22} color={item.type === 'emergency' ? colors.danger : colors.primary} />
+                </View>
                 <View style={styles.info}>
-                  <Text style={styles.title}>{item.title}</Text>
+                  <View style={styles.titleLine}>
+                    <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+                    {!item.read && <View style={styles.unreadDot} />}
+                  </View>
                   <Text style={styles.details} numberOfLines={2}>{item.details}</Text>
                   <Text style={styles.when}>{new Date(item.createdAt).toLocaleString()}</Text>
                 </View>
-                <TouchableOpacity onPress={() => remove(item._id)} accessibilityLabel="Delete notification">
+                <TouchableOpacity style={styles.deleteButton} onPress={() => remove(item._id)} accessibilityLabel="Delete notification">
                   <Ionicons name="trash-outline" size={20} color={colors.textMuted} />
                 </TouchableOpacity>
               </TouchableOpacity>
-              {(item.type === 'emergency' || item.type === 'donor_request') && (
+              {item.type === 'donor_request' && (
                 <View style={styles.response}>
                   <TouchableOpacity onPress={() => respond(item, 'accepted')}><Text style={styles.accept}>Accept</Text></TouchableOpacity>
                   <TouchableOpacity onPress={() => respond(item, 'declined')}><Text style={styles.decline}>Decline</Text></TouchableOpacity>
@@ -217,7 +259,7 @@ export default function NotificationsScreen() {
                   {extractPhone(`${selected.title} ${selected.details}`) && <TouchableOpacity style={styles.callButton} onPress={() => { void makePhoneCall(extractPhone(`${selected.title} ${selected.details}`)!, selected.title); }}><Ionicons name="call-outline" size={18} color={colors.primary} /><Text style={styles.callText}>Call</Text></TouchableOpacity>}
                 </View>
               )}
-              {(selected.type === 'emergency' || selected.type === 'donor_request') && (
+              {selected.type === 'donor_request' && (
                 <View style={styles.response}>
                   <TouchableOpacity onPress={() => respond(selected, 'accepted')}><Text style={styles.accept}>Accept request</Text></TouchableOpacity>
                   <TouchableOpacity onPress={() => respond(selected, 'declined')}><Text style={styles.decline}>Decline</Text></TouchableOpacity>
@@ -251,31 +293,41 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  toolbar: { flexDirection: 'row', justifyContent: 'space-between', padding: spacing.md },
-  count: { color: colors.textSecondary, fontWeight: '700' },
-  link: { color: colors.primary, fontWeight: '800' },
-  filters: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
-  filter: { borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.full, paddingHorizontal: spacing.md, paddingVertical: 7, backgroundColor: colors.card },
+  summaryCard: { flexDirection: 'row', alignItems: 'center', margin: spacing.md, marginBottom: spacing.sm, padding: spacing.md, backgroundColor: colors.primaryTonal, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.primarySoft, ...shadows.sm },
+  summaryIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
+  summaryCopy: { flex: 1, marginLeft: spacing.sm },
+  summaryTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  summaryText: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
+  readAllButton: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: borderRadius.full, backgroundColor: colors.card },
+  readAllText: { color: colors.primary, fontSize: 12, fontWeight: '800' },
+  filters: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm, alignItems: 'center' },
+  filter: { height: 40, justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.full, paddingHorizontal: spacing.md, backgroundColor: colors.card },
   filterActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   filterText: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
   filterTextActive: { color: colors.textInverted },
-  content: { padding: spacing.md, flexGrow: 1 },
-  card: { backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.sm },
-  unread: { borderLeftWidth: 4, borderLeftColor: colors.primary, backgroundColor: colors.primaryTonal },
-  row: { flexDirection: 'row', alignItems: 'flex-start' },
+  content: { paddingHorizontal: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.xl, flexGrow: 1 },
+  card: { backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.borderLight, ...shadows.sm },
+  unread: { borderColor: colors.primarySoft, backgroundColor: colors.card },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  iconBubble: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryTonal },
+  emergencyBubble: { backgroundColor: colors.dangerSoft },
   info: { flex: 1, minWidth: 0, marginLeft: spacing.sm },
-  title: { color: colors.text, fontWeight: '800' },
-  details: { color: colors.textSecondary, marginTop: 4 },
+  titleLine: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
+  title: { color: colors.text, fontWeight: '800', flex: 1 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginLeft: spacing.xs },
+  details: { color: colors.textSecondary, marginTop: 5, lineHeight: 18 },
   when: { color: colors.textMuted, fontSize: 11, marginTop: 5 },
-  response: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.sm, paddingTop: spacing.sm, flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg },
-  accept: { color: colors.success, fontWeight: '800' },
-  decline: { color: colors.danger, fontWeight: '800' },
-  swipeActions: { flexDirection: 'row', marginBottom: spacing.sm },
+  deleteButton: { padding: spacing.xs, marginLeft: spacing.xs },
+  response: { borderTopWidth: 1, borderTopColor: colors.borderLight, marginTop: spacing.md, paddingTop: spacing.sm, flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg },
+  accept: { color: colors.success, fontWeight: '800', padding: spacing.xs },
+  decline: { color: colors.danger, fontWeight: '800', padding: spacing.xs },
+  swipeActions: { flexDirection: 'row', marginBottom: spacing.sm, borderRadius: borderRadius.md, overflow: 'hidden' },
   swipeAccept: { width: 88, backgroundColor: colors.success, justifyContent: 'center', alignItems: 'center' },
   swipeDecline: { width: 88, backgroundColor: colors.danger, justifyContent: 'center', alignItems: 'center' },
   swipeDelete: { width: 76, marginBottom: spacing.sm, backgroundColor: colors.danger, justifyContent: 'center', alignItems: 'center' },
   swipeText: { color: colors.textInverted, fontWeight: '800' },
-  empty: { alignItems: 'center', paddingTop: 100, gap: spacing.md },
+  empty: { alignItems: 'center', justifyContent: 'center', flex: 1, paddingHorizontal: spacing.xl, gap: spacing.md },
+  emptyIcon: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successSoft },
   heading: { color: colors.text, fontWeight: '800', fontSize: 18 },
   emptyText: { color: colors.textMuted },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

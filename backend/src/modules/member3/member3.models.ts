@@ -1,6 +1,6 @@
 import mongoose, { Schema, type Document, type Model } from 'mongoose';
 
-export type AlertType = 'emergency' | 'donor_request' | 'accepted' | 'campaign' | 'availability';
+export type AlertType = 'emergency' | 'donor_request' | 'request_submitted' | 'accepted' | 'declined' | 'campaign' | 'availability' | 'message' | 'call';
 
 export interface SavedSearchDocument extends Document {
   ownerId: mongoose.Types.ObjectId;
@@ -81,7 +81,7 @@ requestSchema.index({ requesterId: 1, donorId: 1, status: 1 });
 
 const notificationSchema = new Schema<NotificationDocument>({
   recipientId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  type: { type: String, enum: ['emergency', 'donor_request', 'accepted', 'campaign', 'availability'], required: true },
+  type: { type: String, enum: ['emergency', 'donor_request', 'request_submitted', 'accepted', 'declined', 'campaign', 'availability', 'message', 'call'], required: true },
   title: { type: String, required: true, trim: true },
   details: { type: String, required: true, trim: true },
   read: { type: Boolean, default: false },

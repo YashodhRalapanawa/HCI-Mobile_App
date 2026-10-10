@@ -69,6 +69,7 @@ export interface UserDocument extends Document {
   donationHistory: DonationRecord[];
   badges: DonorBadge[];
   preferences: UserPreferences;
+  pushTokens: string[];
   otpCode?: string;
   otpExpiresAt?: Date;
   avatarUrl?: string;
@@ -174,6 +175,7 @@ const userSchema = new Schema<UserDocument>(
       isPublicDonor: { type: Boolean, default: true },
       language: { type: String, enum: ['en', 'si', 'ta'], default: 'en' },
     },
+    pushTokens: { type: [String], default: [] },
     otpCode: { type: String },
     otpExpiresAt: { type: Date },
     avatarUrl: { type: String, default: '' },

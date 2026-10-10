@@ -429,6 +429,92 @@ donationRequestRouter.post(
             },
           );
 
+          /**
+           * DELETE /api/donation-requests/:id/accept
+           * Withdraws the authenticated donor's response from an open request.
+           * Closed and expired requests remain historical records and cannot be withdrawn.
+           */
+          donationRequestRouter.delete(
+            '/:id/accept',
+            authenticate,
+            async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+              try {
+                if (!req.user || req.user.role !== 'donor') {
+                  res.status(403).json({
+                    message: 'Access restricted to registered blood donors.',
+                  });
+                  return;
+                }
+
+                const { id } = req.params;
+                if (!mongoose.isValidObjectId(id)) {
+                  res.status(400).json({ message: 'Invalid donation request ID format.' });
+                  return;
+                }
+
+                const session = await mongoose.startSession();
+                try {
+                  let removed = false;
+                  await session.withTransaction(async () => {
+                    const request = await DonationRequest.findOne({
+                      _id: id,
+                      status: 'published',
+                      $or: [
+                        { neededBy: { $exists: false } },
+                        { neededBy: null },
+                        { neededBy: { $gte: new Date() } },
+                      ],
+                    }).session(session);
+
+                    if (!request) {
+                      throw new Error('DONATION_REQUEST_NOT_AVAILABLE');
+                    }
+
+                    const deleted = await DonationResponse.findOneAndDelete({
+                      donationRequestId: id,
+                      donorId: req.user!._id,
+                    }).session(session);
+
+                    if (!deleted) {
+                      throw new Error('DONATION_RESPONSE_NOT_FOUND');
+                    }
+
+                    await DonationRequest.updateOne(
+                      { _id: id, responseCount: { $gt: 0 } },
+                      { $inc: { responseCount: -1 } },
+                      { session },
+                    );
+                    removed = true;
+                  });
+
+                  if (removed) {
+                    res.status(200).json({ message: 'Your donation response was cancelled.' });
+                  }
+                } catch (transactionError: unknown) {
+                  const message = (transactionError as Error)?.message;
+                  if (message === 'DONATION_REQUEST_NOT_AVAILABLE') {
+                    res.status(409).json({
+                      message: 'This donation request is closed or expired, so the response cannot be cancelled.',
+                    });
+                    return;
+                  }
+                  if (message === 'DONATION_RESPONSE_NOT_FOUND') {
+                    res.status(404).json({ message: 'You have not accepted this donation request.' });
+                    return;
+                  }
+                  throw transactionError;
+                } finally {
+                  await session.endSession();
+                }
+              } catch (error) {
+                console.error('[donation-requests] Error cancelling donation response:', error);
+                res.status(500).json({
+                  message: 'An error occurred while cancelling your donation response.',
+                });
+              }
+            },
+          );
+
           if (!updatedRequest) {
             throw new Error('DONATION_REQUEST_NOT_AVAILABLE');
           }

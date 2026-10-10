@@ -11,7 +11,30 @@ import {
   type RequestStatus,
 } from './request.model.js';
 import { DonorAcceptance } from './donorAcceptance.model.js';
+import { User, type BloodGroup } from '../users/user.model.js';
 import { createBloodRequestSchema } from './request.validation.js';
+import { Notification } from '../member3/member3.models.js';
+import { sendPushNotification } from '../notifications/push.service.js';
+
+const compatibleDonorGroups: Record<BloodGroup, BloodGroup[]> = {
+  'A+': ['A+', 'A-', 'O+', 'O-'],
+  'A-': ['A-', 'O-'],
+  'B+': ['B+', 'B-', 'O+', 'O-'],
+  'B-': ['B-', 'O-'],
+  'AB+': ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+  'AB-': ['A-', 'B-', 'AB-', 'O-'],
+  'O+': ['O+', 'O-'],
+  'O-': ['O-'],
+};
+
+const hospitalCoordinates: Record<string, [number, number]> = {
+  'hosp-colombo-city': [79.8612, 6.9271],
+  'hosp-nbts-narahenpita': [79.8737, 6.9067],
+  'hosp-cnh-colombo': [79.8616, 6.9167],
+  'hosp-sjh-kotte': [79.8895, 6.8731],
+  'hosp-kandy-gen': [80.635, 7.2906],
+  'hosp-karapitiya-galle': [80.221, 6.0329],
+};
 import {
   documentUpload,
   validateFileSignature,
@@ -165,6 +188,54 @@ requestRouter.post(
       });
 
       const savedRequest = await newRequest.save();
+      const notification = await Notification.create({
+        recipientId: req.user!._id,
+        type: 'request_submitted',
+        title: 'Blood request submitted',
+        details: `Your ${savedRequest.bloodGroup} blood request for ${savedRequest.unitsRequired} unit${savedRequest.unitsRequired === 1 ? '' : 's'} was submitted and is awaiting hospital verification.`,
+        relatedRequestId: savedRequest._id,
+      });
+      await sendPushNotification(req.user!, {
+        title: notification.title,
+        body: notification.details,
+        data: { notificationId: notification._id.toString(), type: notification.type },
+        sound: 'default',
+      });
+
+      if (savedRequest.urgency === 'Urgent') {
+        const coordinates = hospitalCoordinates[savedRequest.hospitalId] ?? [79.8612, 6.9271];
+        const eligibleGroups = compatibleDonorGroups[savedRequest.bloodGroup] ?? [savedRequest.bloodGroup];
+        const nearbyDonors = await User.find({
+          role: 'donor',
+          bloodGroup: { $in: eligibleGroups },
+          isAvailable: true,
+          isEligible: true,
+          'preferences.emergencyNotifications': true,
+          location: {
+            $near: {
+              $geometry: { type: 'Point', coordinates },
+              $maxDistance: 50000,
+            },
+          },
+          _id: { $ne: req.user!._id },
+        });
+
+        await Promise.all(nearbyDonors.map(async (donor) => {
+          const emergencyNotification = await Notification.create({
+            recipientId: donor._id,
+            type: 'emergency',
+            title: 'Urgent blood request nearby',
+            details: `${savedRequest.bloodGroup} blood is urgently needed at ${savedRequest.hospitalName}.`,
+            relatedRequestId: savedRequest._id,
+          });
+          await sendPushNotification(donor, {
+            title: emergencyNotification.title,
+            body: emergencyNotification.details,
+            data: { notificationId: emergencyNotification._id.toString(), type: emergencyNotification.type, requestId: savedRequest._id.toString() },
+            sound: 'default',
+          });
+        }));
+      }
 
       res.status(201).json({
         message: 'Blood request submitted successfully and is awaiting hospital verification.',
@@ -900,4 +971,3 @@ requestRouter.post(
     }
   },
 );
-
